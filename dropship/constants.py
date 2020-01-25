@@ -1,0 +1,3 @@
+ExternalConnection = "EXTERNAL"
+
+OutDir = "./out"

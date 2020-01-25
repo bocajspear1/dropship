@@ -1,0 +1,10 @@
+---
+- hosts: "{{ bootstrap_host }}"
+  ansible_connection: network_cli
+  tasks:
+    - name: Setup hostname
+      vyos_config:
+        lines:
+          - set system host-name {{ inventory_hostname }}
+    - name: Setup internal interface
+    - name: Setup external interface
