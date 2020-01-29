@@ -1,5 +1,9 @@
 import requests
 import time
+import logging
+import re
+
+logger = logging.getLogger('dropship')
 
 class NodeObj():
     def __init__(self, base, node_id):
@@ -24,11 +28,15 @@ class NodeObj():
             "newid": nextid
         }
 
-        status, data = self._base.auth_post("{}/qemu/{}/clone".format(self._node_path(), vmid), args)
-        print(status, data)
+        error, data = self._base.auth_post("{}/qemu/{}/clone".format(self._node_path(), vmid), args)
+        print(error, data)
 
-        if status == 200:
+        if error is None:
             self.tasks.append(data)
+
+            return None, nextid
+        else:
+            return error, 0
 
     def set_vm_config(self, vmid, config):
         new_config = {}
@@ -40,10 +48,15 @@ class NodeObj():
                     config_string += config[item]['_item']
                     del config[item]['_item']
                 for subitem in config[item]:
-                    config_string += "," + subitem + "=" + config[item][subitem]
+                    if config_string != "":
+                        config_string += "," + subitem + "=" + config[item][subitem]
+                    else:
+                        config_string += subitem + "=" + config[item][subitem]
                 new_config[item] = config_string
             else:
                 new_config[item] = config[item]
+
+        print(new_config)
 
         status, data = self._base.auth_post("{}/qemu/{}/config".format(self._node_path(), vmid), new_config)
         print(status)
@@ -96,23 +109,28 @@ class NodeObj():
 
 
 class Proxmox():
-    def __init__(self, server_url, ignore_ssl=False):
+    def __init__(self, server_url, verify_ssl=False):
         if server_url.endswith("/"):
             self._url = server_url[:-1]
         else:
             self._url = server_url
         self._username = ""
-        self._ignore_ssl = ignore_ssl
+        self._verify_ssl = verify_ssl
+        if self._verify_ssl:
+            logger.warning("Ignoring SSL certificate errors")
         self._csrf = ""
         self._token = ""
 
 
     def auth_post(self, path, data):
-        print(path)
+        
+        if not path.startswith("/"):
+            path = "/" + path
+
         resp = requests.post(
-            "{}/api2/json/{}".format(self._url, path), 
+            "{}/api2/json{}".format(self._url, path), 
             data=data, 
-            verify=self._ignore_ssl,
+            verify=self._verify_ssl,
             headers={
                 "CSRFPreventionToken": self._csrf
             },
@@ -127,9 +145,13 @@ class Proxmox():
             return resp.json()['errors'], None
 
     def auth_get(self, path):
+
+        if not path.startswith("/"):
+            path = "/" + path
+
         resp = requests.get(
-            "{}/api2/json/{}".format(self._url, path), 
-            verify=self._ignore_ssl,
+            "{}/api2/json{}".format(self._url, path), 
+            verify=self._verify_ssl,
             headers={
                 "CSRFPreventionToken": self._csrf
             },
@@ -139,14 +161,18 @@ class Proxmox():
         )
         status = resp.status_code
         if status == 200:
-            return status, resp.json()['data']
+            return None, resp.json()['data']
         else:
             return resp.json()['errors'], None
 
     def auth_delete(self, path):
+
+        if not path.startswith("/"):
+            path = "/" + path
+
         resp = requests.delete(
-            "{}/api2/json/{}".format(self._url, path), 
-            verify=self._ignore_ssl,
+            "{}/api2/json{}".format(self._url, path), 
+            verify=self._verify_ssl,
             headers={
                 "CSRFPreventionToken": self._csrf
             },
@@ -156,7 +182,7 @@ class Proxmox():
         )
         status = resp.status_code
         if status == 200:
-            return status, resp.json()['data']
+            return None, resp.json()['data']
         else:
             return resp.json()['errors'], None
 
@@ -165,28 +191,30 @@ class Proxmox():
         resp = requests.post("{}/api2/json/access/ticket".format(self._url), data={
             "username": self._username,
             "password": password
-        }, verify=self._ignore_ssl)
+        }, verify=self._verify_ssl)
         
 
         if resp.status_code == 200:
             self._token = resp.json()['data']['ticket']
             self._csrf = resp.json()['data']['CSRFPreventionToken']
+            logger.info("Proxmox authenticated successfully")
             return True
         else:
-            print("Authentication failed!")
+            logger.error("Proxmox authentication failed")
             return False
 
     def Node(self, node_id):
         node = NodeObj(self, node_id)
-        status, data = node.get_status()
-        if status != 200:
+        error, data = node.get_status()
+        if error is not None:
+            logger.error(error)
             raise ValueError("Invalid node id")
         else:
             return node
 
     def get_next_id(self):
-        status, data = self.auth_get("/cluster/nextid")
-        if status == 200:
+        error, data = self.auth_get("/cluster/nextid")
+        if error is None:
             return int(data)
         else:
             return None
@@ -194,16 +222,89 @@ class Proxmox():
 
 class ProxmoxProvider():
 
-    def __init__(self, config):
+    def __init__(self, config, vm_map):
         # super().__init__(config)
         self._config = config
-        self._proxmox = Proxmox(self._config['proxmox']['host'], ignore_ssl=True)
+        self._vm_map = vm_map
+        self._proxmox = Proxmox(self._config['host'], verify_ssl=self._config['verify_ssl'])
+        self._node = None
 
     def connect(self, username, password):
+        logger.info("Connecting to {}, using node '{}'".format(self._config['host'], self._config['node']))
         self._proxmox.connect(username, password)
+        self._node = self._proxmox.Node(self._config['node'])
 
     def has_template(self, template_name):
         pass
 
     def clone_vm(self, template, new_name):
-        pass
+        if template not in self._vm_map:
+            raise ValueError("Invalid template")
+
+        error, vmid = self._node.clone_vm(self._vm_map[template], new_name, linked=True)
+        if error is None:
+            logger.info("Creating clone of template {} named {} ({})".format(template, new_name, vmid))
+            return vmid 
+        else:
+            logger.error("Clone failed!")
+            logger.error(error)
+            return 0
+
+
+    def set_interface(self, vmid, interface_num, new_switch):
+        
+        error, vmconfig = self._node.get_vm_config(vmid)
+        interface_name = "net{}".format(interface_num)
+
+
+        if error is None:
+            if interface_name not in vmconfig:
+                # Just imitate the first interface, kinda lazy
+                new_interface_config = vmconfig['net0']
+                # Proxmox uses the type as the key type, identify by MAC format
+                key = ""
+                for item in new_interface_config:
+                    if re.match(r"[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}", new_interface_config[item]):
+                        key = item
+                new_interface_config['model'] = key
+                new_interface_config['bridge'] = new_switch
+                del new_interface_config[key]
+                print(new_interface_config)
+                error, data = self._node.set_vm_config(vmid, {interface_name: new_interface_config})
+                if error is not None:
+                    logger.error(error)
+            else:
+                update_net = vmconfig[interface_name]
+                update_net['bridge'] = new_switch
+                error, data = self._node.set_vm_config(vmid, {interface_name: update_net})
+                if error is not None:
+                    logger.error(error)
+
+    def get_interface(self, vmid, interface_num):
+        error, vmconfig = self._node.get_vm_config(vmid)
+        interface_name = "net{}".format(interface_num)
+
+
+        if error is None:
+            if interface_name in vmconfig:
+                iface_data = vmconfig[interface_name]
+                outdata = {
+                    "name": interface_name,
+                    "switch": iface_data['bridge'],
+                    "mac": ""
+                }
+
+                for item in iface_data:
+                    if re.match(r"[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}", iface_data[item]):
+                        outdata['mac'] = iface_data[item]
+
+                return outdata
+            else:
+                return None
+
+    def wait(self):
+        self._node.wait_tasks()
+            
+    
+
+
