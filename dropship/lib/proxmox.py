@@ -86,6 +86,10 @@ class NodeObj():
             
         return status, return_data
 
+    def start_vm(self, vmid):
+        status, data = self._base.auth_post("{}/qemu/{}/status/start".format(self._node_path(), vmid), {})
+        return status, data
+
     def get_status(self):
         return self._base.auth_get("{}/status".format(self._node_path()))
 
@@ -250,6 +254,8 @@ class ProxmoxProvider():
             logger.error(error)
             return 0
 
+    def start_vm(self, vmid):
+        return self._node.start_vm(vmid)
 
     def set_interface(self, vmid, interface_num, new_switch):
         

@@ -58,9 +58,8 @@ class Dropship():
         self.dnsmasq.start()
 
         
-        if os.path.exists(dropship.constants.OutDir):
-            shutil.rmtree(dropship.constants.OutDir)
-        os.mkdir(dropship.constants.OutDir)
+        if not os.path.exists(dropship.constants.OutDir):
+            os.mkdir(dropship.constants.OutDir)
 
 
         for network in self.networks:

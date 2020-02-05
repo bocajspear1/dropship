@@ -5,6 +5,7 @@ class VyosRouter(BaseModule):
     __DESC__ = "VyOS Router"
     __IMAGE__ = "vyos"
     __VARS__ = [""]
+    __PROVIDES__ = "router"
 
 
 __MODULE__ = VyosRouter
