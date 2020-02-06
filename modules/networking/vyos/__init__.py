@@ -6,6 +6,8 @@ class VyosRouter(BaseModule):
     __IMAGE__ = "vyos"
     __VARS__ = [""]
     __PROVIDES__ = "router"
+    __METHOD__ = "network_cli"
+    __OSTYPE__ = "vyos"
 
 
 __MODULE__ = VyosRouter

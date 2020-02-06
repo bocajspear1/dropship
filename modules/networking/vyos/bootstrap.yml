@@ -1,12 +1,14 @@
----
-- hosts: "{{ item }}"
-  ansible_connection: network_cli
-  tasks:
-    - name: Setup hostname
-      vyos_config:
-        lines:
-          - set system host-name {{ inventory_hostname }}
-    - name: Setup interfaces
-      debug:
-        
-      loop: "hostvars[{{ item }}]"
+- name: Write the router host key to known hosts
+  connection: local
+  shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
+- name: Setup hostname
+  vyos_config:
+    lines:
+      - set system host-name {{ inventory_hostname }}
+  when: "'pre-' not in inventory_hostname"
+- name: Setup other interfaces
+  vyos_config:
+    lines:
+      - delete interfaces ethernet {{ item.iface }} address dhcp
+      - set interfaces ethernet {{ item.iface }} address {{ item.addr }}
+  loop: "{{ hostvars[inventory_hostname]['interfaces']}}"

@@ -39,7 +39,7 @@ class DropshipDNSMasq():
             "--dhcp-authoritative",
             "--dhcp-leasefile={}".format(self._leases_path),
             "--dhcp-hostsfile=/tmp/ds-dnsmasq.hosts",
-            "--dhcp-range={},{},1h".format(self._config['range_start'], self._config['range_end']),
+            "--dhcp-range={},{},24h".format(self._config['range_start'], self._config['range_end']),
             "-s", "dropship", 
             "-u", getpass.getuser()
         ]
