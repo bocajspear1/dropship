@@ -1,4 +1,5 @@
-# A
+# WORKING IN PROGRESS!!!!!
+
 1. Bootstrap - Clone templates and set their addresses and hostnames
 2. Deploy - Perform configurations on the systems to make them operational (connect to AD, start services, etc.)
 3. Post - Perform after the fact configurations that depend on services (vulnerabilities, data generators, user simulators etc.)
