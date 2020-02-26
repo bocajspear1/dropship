@@ -21,13 +21,21 @@ class DropshipNetwork():
         self.ip_range = ipaddress.ip_network(ip_range)
 
         self.clients = []
-        self.dcs = []
-        self.routers = []
+        self.services = []
         self.users = []
 
 
         self._network_dir = ""
         self._bootstrap_dir = ""
+
+    def setup_domain(self, domain, admin, admin_password):
+        self.domain = domain
+        self.domain_admin = admin
+        self.admin_password = admin_password
+
+    def add_dc(self, template, dc_name, ip_addr):
+        domain_module = self._dropship.load_module(template)
+        self.services.append(domain_module)
 
 
 
@@ -57,6 +65,11 @@ class DropshipNetwork():
         self._bootstrap_dir = dropship.constants.OutDir + "/" + self.name + "/bootstrap/"
         if not os.path.exists(self._bootstrap_dir):
             os.mkdir(self._bootstrap_dir)
+
+        # First bootstrap services
+
+        for server in self.services:
+            
         
         # deploy_dir = dropship.constants.OutDir + "/" + self.name + "/deploy"
         # os.mkdir(deploy_dir)

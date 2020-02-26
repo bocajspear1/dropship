@@ -1,0 +1,31 @@
+- name: Wait for server to come online
+  wait_for_connection:
+- name: Write the router host key to known hosts
+  connection: local
+  shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
+- name: Update the server cache
+  apt: 
+    update_cache: yes
+- name: Update the server packages
+  apt: 
+    upgrade: dist
+- name: Install required packages
+  apt:
+    pkg:
+    - samba 
+    - krb5-user 
+    - krb5-config 
+    - winbind 
+    - libpam-winbind 
+    - libnss-winbind
+    update_cache: yes
+- name: Set server hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+    use: debian
+- name: Reboot server
+  reboot:
+- name: Set a static IP
+  
+    
+    

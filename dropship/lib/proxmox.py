@@ -25,7 +25,10 @@ class NodeObj():
         args = {
             "name": new_name,
             "full": full,
-            "newid": nextid
+            "newid": nextid,
+            # For bug: https://bugzilla.proxmox.com/show_bug.cgi?id=2578
+            "target": "localhost"
+
         }
 
         error, data = self._base.auth_post("{}/qemu/{}/clone".format(self._node_path(), vmid), args)
@@ -142,10 +145,12 @@ class Proxmox():
                 "PVEAuthCookie": self._token
             }
         )
+
         status = resp.status_code
         if status == 200:
             return None, resp.json()['data']
         else:
+            print(resp.json())
             return resp.json()['errors'], None
 
     def auth_get(self, path):

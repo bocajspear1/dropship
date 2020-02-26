@@ -1,3 +1,5 @@
+- name: Wait for router to come online
+  wait_for_connection:
 - name: Write the router host key to known hosts
   connection: local
   shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
@@ -5,10 +7,13 @@
   vyos_config:
     lines:
       - set system host-name {{ inventory_hostname }}
+    save: yes
   when: "'pre-' not in inventory_hostname"
 - name: Setup other interfaces
   vyos_config:
     lines:
       - delete interfaces ethernet {{ item.iface }} address dhcp
       - set interfaces ethernet {{ item.iface }} address {{ item.addr }}
-  loop: "{{ hostvars[inventory_hostname]['interfaces']}}"
+    save: yes
+  loop: "{{ hostvars[inventory_hostname]['interfaces'] }}"
+  when: "'interfaces' in hostvars[inventory_hostname]"

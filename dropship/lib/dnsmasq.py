@@ -6,6 +6,10 @@ import time
 
 logger = logging.getLogger('dropship')
 
+# Controls and managers DNSmasq for Dropship
+# 
+# dnsmasq provides the DHCP required to get initial access to the cloned VMs
+#
 class DropshipDNSMasq():
 
     def __init__(self, config):
