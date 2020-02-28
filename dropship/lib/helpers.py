@@ -1,6 +1,13 @@
 import os
 from datetime import datetime
 
+from yaml import load, dump
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    from yaml import Loader, Dumper
+
+
 # Stores data about in process deployments
 class StateFile():
     def __init__(self, path):
@@ -70,8 +77,9 @@ class StateFile():
             infile.close()
             file_lines = infile_data.split("\n")
             for line in file_lines:
-                line_split = line.split("|")
-                self.add_entry(line_split[0], line_split[1], line_split[2], line_split[3])
+                if line.strip() != "":
+                    line_split = line.split("|")
+                    self.add_full_entry(line_split[0], line_split[1], line_split[2], line_split[3])
 
     def to_file(self):
         outfile = open(self.path, "w+")
@@ -87,15 +95,98 @@ class StateFile():
                 mac_list.append(mac)
         return mac_list
 
-class BasePlaybook(self):
+# Stores inventory information that is put into an Ansible inventory file
+class DropshipInventory():
     
-    def __init__(self, name):
-        self.name = name
+    def __init__(self):
+        self.groups = {}
+        self._group_metadata = {}
+
+    def group_list(self):
+        return self.groups.keys()
+
+    def has_group(self, group_name):
+        return group_name in self.groups
+
+    def add_group(self, group_name, os_type, connection_type, username, password):
+        self.groups[group_name] = {
+            "hosts": {},
+            "vars": {
+                "ansible_connection": connection_type,
+                "ansible_network_os": os_type,
+                "ansible_user": username,
+                "ansible_password": password
+            }
+        }
+        self._group_metadata[group_name] = {}
+
+    def set_group_metadata(self, group_name, key, value):
+        self._group_metadata[group_name][key] = value
+
+    def get_group_metadata(self, group_name, key):
+        return self._group_metadata[group_name][key]
+
+    def add_group_var(self, group_name, var_name, var_value):
+        self.groups[group_name]['vars'][var_name] = var_value
+
+    def add_host(self, group_name, host_name, host_addr, vars=None):
+        self.groups[group_name]['hosts'][host_name] = {
+            "ansible_host": host_addr
+        }
+
+        if vars is not None:
+            self.groups[group_name]['hosts'][host_name].update(vars)
+
+
+    def get_inventory(self):
+        return {
+            "all": {
+                "children": self.groups
+            }
+        }
+
+    def to_file(self, path): 
+        inv_data_out = dump(self.get_inventory(), Dumper=Dumper)
+
+        out_file = open(path, "w+")
+        
+        out_file.write(inv_data_out)
+        out_file.close()
+
+
+class BasePlaybook():
+    
+    def __init__(self):
         self.groups = []
         self.group_data = {}
 
-    def add_group(self, group_name,)
+    def add_group(self, host_group, group_desc, gather_facts=False):
+        self.groups.append(host_group)
+        gather = "no"
+        if gather_facts:
+            gather = "yes"
+        self.group_data[host_group] = {
+            "name": group_desc,
+            "gather_facts": gather,
+            "hosts": host_group,
+            "tasks": []
+        }
 
-    def add_task(self, group, ):
-        if not group in self.groups:
+    def add_task(self, host_group, task):
+        if not host_group in self.groups:
             raise ValueError("Invalid group")
+        self.group_data[host_group]['tasks'].append(task)
+
+    def get_playbook(self):
+        playbook = []
+        for group in self.groups:
+            playbook.append(self.group_data[group])
+        return playbook
+    
+    def to_file(self, path): 
+        inv_data_out = dump(self.get_playbook(), Dumper=Dumper)
+
+        out_file = open(path, "w+")
+        
+        out_file.write(inv_data_out)
+        out_file.close()

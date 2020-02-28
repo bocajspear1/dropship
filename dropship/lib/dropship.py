@@ -20,7 +20,7 @@ import dropship.constants
 from dropship.lib.proxmox import ProxmoxProvider
 from dropship.lib.dnsmasq import DropshipDNSMasq
 from dropship.lib.network import DropshipNetwork
-from dropship.lib.helpers import StateFile
+from dropship.lib.helpers import StateFile, DropshipInventory, BasePlaybook
 
 
 class Dropship():
@@ -55,7 +55,7 @@ class Dropship():
 
     def get_module(self, module_name):
         if module_name in self._module_cache:
-            return self._module_cache[self._module_cache]
+            return self._module_cache[module_name]
 
         module_split = module_name.split(".")
         category = module_split[0]
@@ -159,6 +159,16 @@ class Dropship():
         else:
             return None, None
 
+    def run_ansible(self, inventory_path, playbook_path):
+        # Execute using Ansible command line
+        # Ansible can be called in Python, but its broken, so we do it the old-fashioned way
+        # Good work Ansible!
+        results = subprocess.run([
+            "/bin/sh", "-c", 'ansible-playbook -i {} {}'.format(inventory_path, playbook_path)
+        ])
+
+        return results.returncode
+
     def _bootstrap_routers(self):
         logger.info("Bootstrapping routers...")
         # Prepare router directory
@@ -169,6 +179,10 @@ class Dropship():
 
         state_file = StateFile(router_dir + "router_addr.state")
 
+        if state_file.is_done():
+            logger.warning("Router setup has already been completed")
+            return
+
         # Check for existing state file so we don't clone again
         if not state_file.exists():
 
@@ -177,12 +191,13 @@ class Dropship():
             for i in range(len(self.routers)):
                 router = self.routers[i]
                 template = router['template']
+                template_module = self.get_module(template)
                 router_name = router['router_name']
 
                 state_file.add_system(router_name)
 
                 display_name = "{}".format(router_name)
-                vmid = self.provider.clone_vm(template, display_name)
+                vmid = self.provider.clone_vm(template_module.__IMAGE__, display_name)
                 if vmid == 0:
                     return False
                 self.routers[i]['vmid'] = vmid
@@ -222,26 +237,23 @@ class Dropship():
         else:
             logger.info("Using existing router state file")
 
-        logger.info("Generating router inventory file...")
+        logger.info("Generating router inventory files...")
 
         # Load VM data from state file
         state_file.from_file()
 
         # Create the 'pre' router inventory file, this is run to set the IP for a second final run on the router
-        pre_router_inv = {
-            "all": {
-                "children": {}
-            }
-        }
 
-        # Make a copy of the pre inventory file, as most of the items are the same
-        router_inv = copy.deepcopy(pre_router_inv)
+        pre_router_inv = DropshipInventory()
+        router_inv = DropshipInventory()
+
 
         # Stores data per template, including group and directory info
         template_group_map = {}
 
         for router in self.routers:
-            vmid, mac_addr, ip_addr = state_file.get_system(router['router_name'])
+            router_name = router['router_name']
+            vmid, mac_addr, ip_addr = state_file.get_system(router_name)
 
             self._set_router_vmid(router_name, vmid)
 
@@ -253,21 +265,25 @@ class Dropship():
 
             username, password = self.get_template_credentials(template)
 
-        # Parse each line of the state file
-        for line in state_data:
-            line_split = line.strip().split("|")
-            router_name = line_split[0]
-            vmid = line_split[1]
-            mac_addr = line_split[2]
-            ip_addr = line_split[3]
-
-            
-
-            
-
             # Group routers of same template under a host group
             template_group = "{}_bootstrap".format(template_name)
-            if template_group not in router_inv['all']['children']:
+
+            if not pre_router_inv.has_group(template_group):
+                pre_router_inv.add_group(
+                    template_group, 
+                    template_module.__OSTYPE__, 
+                    template_module.__METHOD__,
+                    username,
+                    password
+                )
+
+                router_inv.add_group(
+                    template_group, 
+                    template_module.__OSTYPE__, 
+                    template_module.__METHOD__,
+                    username,
+                    password
+                )
 
                 # Create the directory to store the module's Ansible files
                 ansible_dir = router_dir + "/" + template_name
@@ -294,18 +310,6 @@ class Dropship():
                     "reboot": dest_file_reboot
                 }
 
-                
-                router_inv['all']['children'][template_group] = {
-                    "hosts": {},
-                    "vars": {
-                        "ansible_connection": template_module.__METHOD__,
-                        "ansible_network_os": template_module.__OSTYPE__,
-                        "ansible_user": username,
-                        "ansible_password": password
-                    }
-                }
-
-                pre_router_inv['all']['children'][template_group] = copy.deepcopy(router_inv['all']['children'][template_group])
 
             new_network = router_data['connections'][1]
             new_network_data = self._get_network_by_name(new_network)
@@ -313,101 +317,80 @@ class Dropship():
 
 
             pre_name = "pre-{}".format(router_name) 
-            pre_router_inv['all']['children'][template_group]['hosts'][pre_name] = {
-                "ansible_host": ip_addr,
+
+            pre_router_inv.add_host(template_group, pre_name, ip_addr, vars={
                 "interfaces": [
                      {
                         "iface": "eth1",
                         "addr": str(new_ip) + "/{}".format(new_network_data.ip_range.prefixlen) 
                      }
                 ]
-            }
-            router_inv['all']['children'][template_group]['hosts'][router_name] = {
-                "ansible_host": str(new_ip),
-                "interfaces": []
-            }
+            })
+            
+            router_inv.add_host(template_group, router_name, str(new_ip))
 
-
-        pre_yaml_out = dump(pre_router_inv, Dumper=Dumper)
-        yaml_out = dump(router_inv, Dumper=Dumper)
-        
         pre_inventory_path = router_dir + "pre_inventory.yml"
-        inventory_path = router_dir + "inventory.yml"
+        pre_router_inv.to_file(pre_inventory_path)
+        router_inventory_path = router_dir + "inventory.yml"
+        router_inv.to_file(router_inventory_path)
 
-        out_pre_inv = open(pre_inventory_path, "w+")
-        out_inv = open(inventory_path, "w+")
+        pre_playbook = BasePlaybook()
+        base_playbook = BasePlaybook()
 
-        out_pre_inv.write(pre_yaml_out)
-        out_pre_inv.close()
-
-        out_inv.write(yaml_out)
-        out_inv.close()
-
-        # Generate base 
-
-        base_playbook = []
-
+        # Create pre-playbook that will set the initial IP
         for group in template_group_map:
-            play_data = {
-                "name": "Bootstrap {} routers".format(group),
-                "gather_facts": "no",
-                "hosts": template_group_map[group]['group'],
-                "tasks": [
-                    {
-                        "include_tasks": os.path.abspath(template_group_map[group]['bootstrap']),
-                        "name": "Run bootstrap file"
-                    }
-                ]
-            }
-            
-            base_playbook.append(play_data)
+            group_name = template_group_map[group]['group']
+            pre_playbook.add_group(
+                group_name,
+                "Bootstrap {} routers first IP and reboot".format(group)
+            )
 
-        second_playbook = []
-        
+            pre_playbook.add_task(
+                group_name,
+                {
+                    "include_tasks": os.path.abspath(template_group_map[group]['bootstrap']),
+                    "name": "Run bootstrap file"
+                }
+            )
+            pre_playbook.add_task(
+                group_name,
+                {
+                    "include_tasks": os.path.abspath(template_group_map[group]['reboot']),
+                    "name": "Run reboot file"
+                }
+            )
+
+        # Generate base playbook that will set the system name
         for group in template_group_map:
-            play_data = {
-                "name": "Bootstrap {} routers and reboot".format(group),
-                "gather_facts": "no",
-                "hosts": template_group_map[group]['group'],
-                "tasks": [
-                    {
-                        "include_tasks": os.path.abspath(template_group_map[group]['bootstrap']),
-                        "name": "Run bootstrap file"
-                    },
-                    {
-                        "include_tasks": os.path.abspath(template_group_map[group]['reboot']),
-                        "name": "Run reboot file"
-                    }
-                ]
-            }
-            
-            second_playbook.append(play_data)
+            group_name = template_group_map[group]['group']
+            base_playbook.add_group(
+                group_name, 
+                "Bootstrap {} routers".format(group)
+            )
+
+            base_playbook.add_task(
+                group_name,
+                {
+                    "include_tasks": os.path.abspath(template_group_map[group]['bootstrap']),
+                    "name": "Run bootstrap file"
+                }
+            )
 
 
         pre_playbook_path = router_dir + "pre_playbook.yml"
-        base_yaml = dump(base_playbook, Dumper=Dumper)
-        out_base_playbook = open(pre_playbook_path, "w+")
-        out_base_playbook.write(base_yaml)
-        out_base_playbook.close()
-
+        pre_playbook.to_file(pre_playbook_path)
         base_playbook_path = router_dir + "base_playbook.yml"
-        base_yaml = dump(second_playbook, Dumper=Dumper)
-        out_base_playbook = open(base_playbook_path, "w+")
-        out_base_playbook.write(base_yaml)
-        out_base_playbook.close()
+        base_playbook.to_file(base_playbook_path)
+
 
         logger.info("Inventory files created!")
 
-        # Execute using Ansible command line
-        # Ansible can be called in Python, but its broken, so we do it the old-fashioned way
-        # Good work Ansible!
+        
 
         logger.info("Running pre-inventory Ansible")
-        results = subprocess.run([
-            "/bin/sh", "-c", 'ansible-playbook -i {} {}'.format(pre_inventory_path, pre_playbook_path)
-        ])
+        result = self.run_ansible(pre_inventory_path, pre_playbook_path)
 
-        if results.returncode != 0:
+        if result != 0:
             logger.error("Pre-inventory Ansible failed!")
             return
 
@@ -436,11 +419,9 @@ class Dropship():
                     self.provider.set_interface(router['vmid'], i, self.external_switch)
 
         logger.info("Running main router Ansible")
-        results = subprocess.run([
-            "/bin/sh", "-c", 'ansible-playbook -i {} {}'.format(inventory_path, base_playbook_path)
-        ])
+        result = self.run_ansible(router_inventory_path, base_playbook_path)
 
-        if results.returncode != 0:
+        if result != 0:
             logger.error("Ansible failed!")
             return
 
@@ -452,7 +433,9 @@ class Dropship():
                     network = self._get_network_by_name(connection)
                     self.provider.set_interface(router['vmid'], i, network.switch_id)
 
-            
+        # Mark the routers as completed
+        state_file.mark_done()
+
 
 
     def complete(self):
