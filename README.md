@@ -1,4 +1,6 @@
-# WORKING IN PROGRESS!!!!!
+# WORK IN PROGRESS!!!!!
+
+This isn't anywhere done yet
 
 1. Bootstrap - Clone templates and set their addresses and hostnames
 2. Deploy - Perform configurations on the systems to make them operational (connect to AD, start services, etc.)
