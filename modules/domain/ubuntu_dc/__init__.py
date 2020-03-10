@@ -9,6 +9,8 @@ class UbuntuDC(BaseModule):
     __METHOD__ = "ssh"
     __OSTYPE__ = "debian"
     __BOOTSTRAP_FILES__ = ['netplan.yml']
+    __BECOME_METHOD__ = "sudo"
+    __BECOME_USER__ = "root"
 
 
 __MODULE__ = UbuntuDC

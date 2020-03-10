@@ -1,0 +1,9 @@
+network:
+    ethernets:
+        eth0:
+            dhcp4: no
+            dhcp6: no
+            addresses: [{{ new_ip }}/{{ new_prefix }}, ]
+            gateway4:  {{ network_gateway }}
+            nameservers:
+                    addresses: [{{ network_ext_dns }}]

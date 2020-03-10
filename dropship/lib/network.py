@@ -21,6 +21,7 @@ class DropshipNetwork():
         self.domain_admin = ""
         self.admin_password = ""
         self.ip_range = ipaddress.ip_network(ip_range)
+        self.dns_forwarder = ""
 
         self.clients = []
         self.services = []
@@ -29,6 +30,9 @@ class DropshipNetwork():
 
         self._network_dir = ""
         self._bootstrap_dir = ""
+
+    def set_dns_forwarder(self, server):
+        self.dns_forwarder = server
 
     def setup_domain(self, domain, admin, admin_password):
         self.domain = domain
@@ -149,10 +153,33 @@ class DropshipNetwork():
                     os.mkdir(ansible_dir)
 
                 # Get the module's bootstrap.yml file
+
                 ansible_bootstrap = template_module.get_dir() + "/bootstrap.yml"
                 dest_file = ansible_dir + "/bootstrap.yml"
-                # Copy the bootstrap file to our working directory
-                shutil.copyfile(ansible_bootstrap, dest_file)
+
+                # Check for files
+                if not hasattr(template_module, '__BOOTSTRAP_FILES__'):
+                    # If no files, there's no paths to change, so just copy the bootstrap file
+                    shutil.copyfile(ansible_bootstrap, dest_file)
+                else:
+                    files_dir = ansible_dir + "/files"
+
+                    if not os.path.exists(files_dir):
+                        os.mkdir(files_dir)
+
+                    for item in template_module.__BOOTSTRAP_FILES__:
+                        shutil.copyfile(template_module.get_dir() + "/files/" + item, files_dir + "/" + item)
+
+                    bs_file = open(ansible_bootstrap, "r")
+                    bs_file_data = bs_file.read()
+                    bs_file.close()
+
+                    bs_file_data = bs_file_data.replace("+TEMPLATES+", os.path.abspath(files_dir))
+
+                    out_bs_file = open(dest_file, "w+")
+                    out_bs_file.write(bs_file_data)
+                    out_bs_file.close()
+
 
                 # Get the module's reboot.yml file
                 ansible_reboot = template_module.get_dir() + "/reboot.yml"
@@ -164,7 +191,6 @@ class DropshipNetwork():
                 services_inv.set_group_metadata(template_group, 'bootstrap', dest_file)
                 services_inv.set_group_metadata(template_group, 'reboot', dest_file_reboot)
 
-
             new_ip = server['ip_addr']
             
 
@@ -172,6 +198,16 @@ class DropshipNetwork():
                 "new_ip" : new_ip
             })
         
+        services_inv.set_global_var('new_prefix', self.ip_range.prefixlen)
+        services_inv.set_global_var('new_mask', str(self.ip_range.netmask))
+        services_inv.set_global_var('network_ext_dns', self.dns_forwarder)
+        services_inv.set_global_var('network_gateway', str(list(self.ip_range.hosts())[0]))
+        services_inv.set_global_var('ansible_become', 'yes')
+        services_inv.set_global_var('ansible_become_user', template_module.__BECOME_USER__)
+        services_inv.set_global_var('ansible_become_method', template_module.__BECOME_METHOD__)
+        if template_module.__BECOME_METHOD__ == "sudo":
+            services_inv.set_global_var('ansible_become_password', password)
+
         services_inventory_path = self._network_dir + "bootstrap_services_inventory.yml"
         services_inv.to_file(services_inventory_path)
 
@@ -201,6 +237,12 @@ class DropshipNetwork():
 
         base_playbook_path = self._network_dir + "bootstrap_base_playbook.yml"
         base_playbook.to_file(base_playbook_path)
+
+        result = self._dropship.run_ansible(services_inventory_path, base_playbook_path)
+
+        if result != 0:
+            logger.error("Service bootstrap Ansible failed! Please refer to Ansible output for error details.")
+            return
         
         # deploy_dir = dropship.constants.OutDir + "/" + self.name + "/deploy"
         # os.mkdir(deploy_dir)

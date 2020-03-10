@@ -1,8 +1,15 @@
 - name: Wait for server to come online
-  wait_for_connection:
-- name: Write the router host key to known hosts
-  connection: local
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+- name: Write the host key to known hosts
+  delegate_to: localhost
   shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
+  become: no
+- name: test
+  shell: "whoami > /tmp/hello"
 - name: Update the server cache
   apt: 
     update_cache: yes
@@ -20,12 +27,15 @@
     - libnss-winbind
     update_cache: yes
 - name: Set server hostname
-  hostname:
-    name: "{{ inventory_hostname }}"
-    use: debian
+  shell: "hostnamectl set-hostname {{ inventory_hostname }}"
+- name: Set a static IP using netplan
+  template:
+    src: +TEMPLATES+/netplan.yml
+    dest: /etc/netplan/01-netcfg.yaml
 - name: Reboot server
-  reboot:
-- name: Set a static IP
+  shell: 'sleep 2 && shutdown -r now'
+  poll: 0
+  async: 1
   
     
     

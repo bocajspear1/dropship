@@ -101,7 +101,11 @@ class DropshipInventory():
     def __init__(self):
         self.groups = {}
         self._group_metadata = {}
+        self._vars = {}
 
+    def set_global_var(self, key, value):
+        self._vars[key] = value
+    
     def group_list(self):
         return self.groups.keys()
 
@@ -141,8 +145,15 @@ class DropshipInventory():
     def get_inventory(self):
         return {
             "all": {
-                "children": self.groups
-            }
+                "children": self.groups,
+                "vars": self._vars,
+                "hosts": {
+                    "localhost": {
+                        "ansible_become": 'no'
+                    }
+                }
+            },
+            
         }
 
     def to_file(self, path): 
