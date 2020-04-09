@@ -32,7 +32,7 @@ class NodeObj():
         }
 
         error, data = self._base.auth_post("{}/qemu/{}/clone".format(self._node_path(), vmid), args)
-        print(error, data)
+        # print(error, data)
 
         if error is None:
             self.tasks.append(data)
@@ -59,10 +59,10 @@ class NodeObj():
             else:
                 new_config[item] = config[item]
 
-        print(new_config)
+        # print(new_config)
 
         status, data = self._base.auth_post("{}/qemu/{}/config".format(self._node_path(), vmid), new_config)
-        print(status)
+        # print(status)
         
         return status, data
 
@@ -150,7 +150,7 @@ class Proxmox():
         if status == 200:
             return None, resp.json()['data']
         else:
-            print(resp.json())
+            # print(resp.json())
             return resp.json()['errors'], None
 
     def auth_get(self, path):
@@ -280,7 +280,7 @@ class ProxmoxProvider():
                 new_interface_config['model'] = key
                 new_interface_config['bridge'] = new_switch
                 del new_interface_config[key]
-                print(new_interface_config)
+                # (printnew_interface_config)
                 error, data = self._node.set_vm_config(vmid, {interface_name: new_interface_config})
                 if error is not None:
                     logger.error(error)

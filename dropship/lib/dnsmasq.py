@@ -15,13 +15,13 @@ class DropshipDNSMasq():
     def __init__(self, config):
         self._config = config
         self._proc = None
-        self._leases_path = "/tmp/ds-dnsmasq.{}.leases".format(time.time())
+        self._leases_path = "/tmp/ds-dnsmasq.leases"
         self._pid_path = "/tmp/ds-dnsmasq.pid"
     
     def start(self):
         if os.path.exists(self._pid_path):
             self.stop()
-            time.sleep(1)
+            time.sleep(2)
 
         dnsmasqPath = subprocess.check_output(["/bin/sh", '-c', 'which dnsmasq']).strip().decode()
 
@@ -82,7 +82,7 @@ class DropshipDNSMasq():
             line_data = line.split(" ")
             if len(line_data) > 4:
                 lease_mac = line_data[1]
-                if lease_mac == mac_addr:
+                if lease_mac.lower() == mac_addr:
                     return line_data[2]
 
         return None

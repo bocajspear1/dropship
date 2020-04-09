@@ -1,0 +1,21 @@
+- name: Wait for server to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 5986
+- name: Set client hostname
+  win_hostname: 
+    name: "{{ inventory_hostname }}"
+- name: Reboot for hostname change
+  win_reboot:
+- name: Set IP, unless set to DHCP
+  win_command: schtasks /Create /TN "Bootstrap Set IP" /TR "C:\Windows\System32\netsh.exe interface ip set address \"Ethernet\" static {{ hostvars[inventory_hostname]['new_ip'] }} {{ hostvars[inventory_hostname]['new_mask'] }} {{ hostvars[inventory_hostname]['network_gateway'] }} 1" /RU SYSTEM /RL HIGHEST /SC ONSTART
+  when: "hostvars[inventory_hostname]['new_ip'] != 'dhcp'"
+- name: Reboot server
+  shell: 'shutdown /s'
+  poll: 0
+  async: 1
+  
+    
+    

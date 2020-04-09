@@ -17,12 +17,7 @@
 - name: Install required packages
   apt:
     pkg:
-    - samba 
-    - krb5-user 
-    - krb5-config 
-    - winbind 
-    - libpam-winbind 
-    - libnss-winbind
+    - dnsmasq
     update_cache: yes
 - name: Set server hostname
   shell: "hostnamectl set-hostname {{ inventory_hostname }}"
@@ -34,10 +29,6 @@
   file:
     path: /etc/netplan/50-cloud-init.yaml
     state: absent
-- name: Reboot server
-  shell: 'sleep 2 && shutdown -r now'
-  poll: 0
-  async: 1
   
     
     

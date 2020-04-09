@@ -119,12 +119,13 @@ class Dropship():
         done = False
         counter = 0
 
+
         while not done and counter < 300:
             for mac in mac_list:
                 if mac not in out_map:
                     ip_addr = self.dnsmasq.get_ip_by_mac(mac)
                     if ip_addr is not None:
-                        out_map[mac] = ip_addr
+                        out_map[mac.lower()] = ip_addr
             
             if len(out_map.keys()) == len(mac_list):
                 done = True
@@ -230,7 +231,7 @@ class Dropship():
 
             
             for router in self.routers:
-                state_file.set_ip(router['router_name'], mac_map[mac_addr])
+                state_file.set_ip(router['router_name'], mac_map[state_file.get_system(system['system_name'])[1]])
             
             # Write a state file
             state_file.to_file()

@@ -1,0 +1,16 @@
+- name: Wait for server to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+- name: Write the host key to known hosts
+  delegate_to: localhost
+  shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
+  become: no
+- name: Copy DHCP collection script
+  copy:
+    src: +TEMPLATES+/dnsmasq_dhcp_collect.sh
+    dest: /tmp/dnsmasq_dhcp_collect.sh
+- name: Run DHCP collection script
+  shell: chmod +x /tmp/dnsmasq_dhcp_collect.sh;/tmp/dnsmasq_dhcp_collect.sh

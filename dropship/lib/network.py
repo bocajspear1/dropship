@@ -22,6 +22,8 @@ class DropshipNetwork():
         self.admin_password = ""
         self.ip_range = ipaddress.ip_network(ip_range)
         self.dns_forwarder = ""
+        self.dhcp_gateway = None
+        self.dhcp_dns = None
 
         self.clients = []
         self.services = []
@@ -34,6 +36,26 @@ class DropshipNetwork():
     def set_dns_forwarder(self, server):
         self.dns_forwarder = server
 
+    def set_dhcp_server(self, template, server_name, ip_addr, gateway=None, dns=None):
+        if gateway is None:
+            self.dhcp_gateway = str(list(self.ip_range.hosts())[0])
+        if dns is None:
+            found = False
+            for server in self.services:
+                if server['role'] == 'domain' and found is False:
+                    found = True
+                    self.dhcp_dns = server['ip_addr']
+            if not found:
+                raise ValueError("No DNS server found for DHCP")
+
+        self.services.append({
+            "template": template,
+            "system_name": server_name,
+            "ip_addr": ip_addr,
+            'vmid': 0,
+            'role': 'dhcp'
+        })
+
     def setup_domain(self, domain, admin, admin_password):
         self.domain = domain
         self.domain_admin = admin
@@ -45,9 +67,9 @@ class DropshipNetwork():
             "template": template,
             "system_name": dc_name,
             "ip_addr": ip_addr,
-            'vmid': 0
+            'vmid': 0,
+            'role': 'domain'
         })
-        pass
 
 
     def bootstrap(self):
@@ -65,7 +87,7 @@ class DropshipNetwork():
         state_file = StateFile(self._network_dir + "services_addr.state")
 
         if state_file.is_done():
-            logger.warning("Services setup has already been completed")
+            logger.warning("Services setup has already been completed for network {}".format(self.name))
             return
 
         # Check for existing state file so we don't clone again
@@ -110,7 +132,7 @@ class DropshipNetwork():
 
             
             for system in self.services:
-                state_file.set_ip(system['system_name'], mac_map[mac_addr])
+                state_file.set_ip(system['system_name'], mac_map[state_file.get_system(system['system_name'])[1]])
 
             # Write a state file
             state_file.to_file()
@@ -128,7 +150,7 @@ class DropshipNetwork():
             system_name = server['system_name']
             template = server['template']
             template_module = self._dropship.get_module(template)
-            template_name = template_module.__NAME__
+            template_name = template_module.__IMAGE__.replace(".", "_")
 
             vmid, mac_addr, ip_addr = state_file.get_system(system_name)
 
@@ -191,22 +213,25 @@ class DropshipNetwork():
                 services_inv.set_group_metadata(template_group, 'bootstrap', dest_file)
                 services_inv.set_group_metadata(template_group, 'reboot', dest_file_reboot)
 
+                services_inv.add_group_var(template_group, 'ansible_become_user', template_module.__BECOME_USER__)
+                services_inv.add_group_var(template_group, 'ansible_become_method', template_module.__BECOME_METHOD__)
+                if template_module.__BECOME_METHOD__ == "sudo":
+                    services_inv.add_group_var(template_group, 'ansible_become_pass', password)
+
             new_ip = server['ip_addr']
             
-
-            services_inv.add_host(template_group, system_name, ip_addr, vars={
+            host_vars = {
                 "new_ip" : new_ip
-            })
+            }
+
+            services_inv.add_host(template_group, system_name, ip_addr, vars=host_vars)
         
         services_inv.set_global_var('new_prefix', self.ip_range.prefixlen)
         services_inv.set_global_var('new_mask', str(self.ip_range.netmask))
         services_inv.set_global_var('network_ext_dns', self.dns_forwarder)
         services_inv.set_global_var('network_gateway', str(list(self.ip_range.hosts())[0]))
         services_inv.set_global_var('ansible_become', 'yes')
-        services_inv.set_global_var('ansible_become_user', template_module.__BECOME_USER__)
-        services_inv.set_global_var('ansible_become_method', template_module.__BECOME_METHOD__)
-        if template_module.__BECOME_METHOD__ == "sudo":
-            services_inv.set_global_var('ansible_become_password', password)
+        
 
         services_inventory_path = self._network_dir + "bootstrap_services_inventory.yml"
         services_inv.to_file(services_inventory_path)
@@ -243,6 +268,12 @@ class DropshipNetwork():
         if result != 0:
             logger.error("Service bootstrap Ansible failed! Please refer to Ansible output for error details.")
             return
+
+        for system in self.services:
+            self._dropship.provider.set_interface(system['vmid'], 0, self.switch_id)
+
+        state_file.mark_done()
+                    
         
         # deploy_dir = dropship.constants.OutDir + "/" + self.name + "/deploy"
         # os.mkdir(deploy_dir)
