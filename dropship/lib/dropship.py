@@ -120,7 +120,7 @@ class Dropship():
         counter = 0
 
 
-        while not done and counter < 300:
+        while not done and counter < 5000:
             for mac in mac_list:
                 if mac not in out_map:
                     ip_addr = self.dnsmasq.get_ip_by_mac(mac)
@@ -128,12 +128,19 @@ class Dropship():
                         out_map[mac.lower()] = ip_addr
             
             if len(out_map.keys()) == len(mac_list):
-                done = True
+                ok = True
+                for mac in mac_list:
+                    if mac not in out_map:
+                        ok = False
+                if ok:
+                    done = True
 
             counter += 1
-            logger.info("Waiting for DHCP to assign addresses...")
+            logger.info("{} - Waiting for DHCP to assign addresses...".format(counter))
             time.sleep(5)
 
+        print(mac_list)
+        print(out_map)
         return out_map
 
     def _get_router_by_name(self, router_name):
@@ -153,7 +160,7 @@ class Dropship():
                 return net
         return None
 
-    def get_template_credentials(self, template_name):
+    def get_image_credentials(self, template_name):
         if template_name in self.config['credentials']:
             cred_split = self.config['credentials'][template_name].split(":")
             return cred_split[0], cred_split[1]
@@ -262,9 +269,9 @@ class Dropship():
             
             template = router_data['template']
             template_module = self.get_module(template)
-            template_name = template_module.__NAME__
+            template_name = template_module.__IMAGE__
 
-            username, password = self.get_template_credentials(template)
+            username, password = self.get_image_credentials(template_module.__IMAGE__)
 
             # Group routers of same template under a host group
             template_group = "{}_bootstrap".format(template_name)

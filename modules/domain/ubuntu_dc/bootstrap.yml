@@ -34,10 +34,7 @@
   file:
     path: /etc/netplan/50-cloud-init.yaml
     state: absent
-- name: Reboot server
-  shell: 'sleep 2 && shutdown -r now'
-  poll: 0
-  async: 1
+
   
     
     

@@ -3,3 +3,4 @@ requests
 paramiko
 pyyaml
 coloredlogs
+pywinrm>=0.3.0

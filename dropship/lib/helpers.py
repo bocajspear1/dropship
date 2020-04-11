@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+import copy
 
 from yaml import load, dump
 try:
@@ -13,6 +14,12 @@ class StateFile():
     def __init__(self, path):
         self.lines = []
         self.path = path
+    
+    def clone(self, path):
+        the_clone = StateFile()
+        the_clone.lines = copy.deepcopy(self.lines)
+        the_clone.path = path
+        return the_clone
 
     def exists(self):
         if os.path.exists(self.path):
@@ -61,6 +68,12 @@ class StateFile():
                 self.lines[i][1] = vmid
                 return True
         return False
+
+    def get_vmid(self, system_name):
+        for i in range(len(self.lines)):
+            if self.lines[i][0] == system_name:
+                return self.lines[i][1]
+        return 0
 
     def set_ip(self, system_name, ip_addr):
         for i in range(len(self.lines)):
