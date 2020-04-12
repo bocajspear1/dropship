@@ -8,17 +8,31 @@ try:
 except ImportError:
     from yaml import Loader, Dumper
 
+# Stores data about in process deployments
+class DoneFile():
+    def __init__(self, path):
+        self.path = path
+
+    def is_done(self):
+        if os.path.exists(self.path):
+            return True
+        return False
+
+    def mark_done(self):
+        donefile = open(self.path, "w+")
+        donefile.write("Done at {}\n".format(datetime.now().isoformat()))
+        donefile.close()
 
 # Stores data about in process deployments
 class StateFile():
     def __init__(self, path):
         self.lines = []
         self.path = path
+        self._done_file = DoneFile(self.path + ".done")
     
     def clone(self, path):
-        the_clone = StateFile()
+        the_clone = StateFile(path)
         the_clone.lines = copy.deepcopy(self.lines)
-        the_clone.path = path
         return the_clone
 
     def exists(self):
@@ -27,14 +41,10 @@ class StateFile():
         return False
 
     def is_done(self):
-        if os.path.exists(self.path + ".done"):
-            return True
-        return False
+        return self._done_file.is_done()
 
     def mark_done(self):
-        donefile = open(self.path + ".done", "w+")
-        donefile.write("Done at {}".format(datetime.now().isoformat()))
-        donefile.close()
+        self._done_file.mark_done()
 
     def has_system(self, system_name):
         for line in self.lines:

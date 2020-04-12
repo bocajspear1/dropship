@@ -1,0 +1,12 @@
+- name: Wait for router to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+- name: Setup NAT
+  vyos_config:
+    lines:
+      - set nat source rule 100 outbound-interface eth0
+      - set nat source rule 100 translation address masquerade
+    save: yes

@@ -33,6 +33,8 @@ class DropshipNetwork():
 
         self._network_dir = ""
         self._bootstrap_dir = ""
+        self._deploy_dir = ""
+        self._post_dir = ""
 
         self._clients_configured_state_file = ""
         self._services_configured_state_file = ""
@@ -85,7 +87,7 @@ class DropshipNetwork():
 
     def _get_bootstrap_state_file(self, filename, hosts_list):
 
-        state_file = StateFile(self._bootstrap_dir + + "bootstrap_" + filename + ".state")
+        state_file = StateFile(self._bootstrap_dir + "bootstrap_" + filename + ".state")
 
         if not state_file.exists():
             logger.info("Cloning systems...")
@@ -141,62 +143,18 @@ class DropshipNetwork():
         return state_file
 
     def _bootstrap_services(self):
-        state_file = StateFile(self._network_dir + "services_addr.state")
+
+        state_file = self._get_bootstrap_state_file('services', self.services)
+        # Create a clone of the state file which we will update with the new IPs for the next steps
+        self._services_configured_state_file = self._deploy_dir + "configured_services.state"
+        next_state = state_file.clone(self._services_configured_state_file)
 
         if state_file.is_done():
             logger.warning("Services bootstrap has already been completed for network {}".format(self.name))
             return True
 
-        # Check for existing state file so we don't clone again
-        if not state_file.exists():
-            logger.info("Cloning services systems...")
-            for i in range(len(self.services)):
-                system = self.services[i]
-                template = system['template']
-                template_module = self._dropship.get_module(template)
-                system_name = system['system_name']
-
-                state_file.add_system(system_name)
-
-                display_name = "{}".format(system_name)
-                vmid = self._dropship.provider.clone_vm(template_module.__IMAGE__, display_name)
-                if vmid == 0:
-                    return False
-                self.services[i]['vmid'] = vmid
-                state_file.set_vmid(system_name, vmid)
-
-            # Wait for clones
-            logger.info("Waiting for clones to complete...")
-            self._dropship.provider.wait()
-            
-            logger.info("Configuring networking and starting systems...")
-            for i in range(len(self.services)):
-                vmid = self.services[i]['vmid']
-                system_name = self.services[i]['system_name']
-                bootstrap_switch = self._dropship.config['bootstrap']['switch']
-                # Set the interface to be on bootstrap switch
-                self._dropship.provider.set_interface(vmid, 0, bootstrap_switch)
-
-                # While we are here, get the mac address for this interface
-                mac_addr = self._dropship.provider.get_interface(vmid, 0)['mac'].lower()
-                state_file.set_mac(system_name, mac_addr)
-
-                time.sleep(1)
-                self._dropship.provider.start_vm(vmid)
-
-            # Get IP mappings
-            mac_map = self._dropship.get_address_map(state_file.get_all_macs())
-
-            
-            for system in self.services:
-                state_file.set_ip(system['system_name'], mac_map[state_file.get_system(system['system_name'])[1]])
-
-            # Write a state file
-            state_file.to_file()
-        else:
-            logger.info("Using existing services state file")
-
-        logger.info("Generating system inventory files...")
+       
+        logger.info("Generating services bootstrap inventory files...")
 
         # Load VM data from state file
         state_file.from_file()
@@ -227,7 +185,7 @@ class DropshipNetwork():
                 services_inv.set_group_metadata(template_group, 'template', template_name)
 
                 # Create the directory to store the module's Ansible files
-                ansible_dir = self._network_dir + "/" + template_name
+                ansible_dir = self._bootstrap_dir + "/" + template_name
                 if not os.path.exists(ansible_dir):
                     os.mkdir(ansible_dir)
 
@@ -286,11 +244,12 @@ class DropshipNetwork():
         services_inv.set_global_var('new_prefix', self.ip_range.prefixlen)
         services_inv.set_global_var('new_mask', str(self.ip_range.netmask))
         services_inv.set_global_var('network_ext_dns', self.dns_forwarder)
+        services_inv.set_global_var('network_int_dns', self.network_int_dns)
         services_inv.set_global_var('network_gateway', str(list(self.ip_range.hosts())[0]))
         services_inv.set_global_var('ansible_become', 'yes')
         
 
-        services_inventory_path = self._network_dir + "bootstrap_services_inventory.yml"
+        services_inventory_path = self._bootstrap_dir + "bootstrap_services_inventory.yml"
         services_inv.to_file(services_inventory_path)
 
         base_playbook = BasePlaybook()
@@ -317,7 +276,7 @@ class DropshipNetwork():
                 }
             )
 
-        base_playbook_path = self._network_dir + "bootstrap_base_playbook.yml"
+        base_playbook_path = self._bootstrap_dir + "bootstrap_base_playbook.yml"
         base_playbook.to_file(base_playbook_path)
 
         result = self._dropship.run_ansible(services_inventory_path, base_playbook_path)
@@ -327,19 +286,20 @@ class DropshipNetwork():
             return False
 
         for system in self.services:
-            self._dropship.provider.set_interface(system['vmid'], 0, self.switch_id)
+            self._dropship.provider.set_interface(state_file.get_vmid(system['system_name']), 0, self.switch_id)
 
         # Create a state file for the deploy and post parts
 
 
         state_file.mark_done()
+        next_state.to_file()
         return True
 
     def _bootstrap_clients(self):
         
         state_file = self._get_bootstrap_state_file('clients', self.clients)
         # Create a clone of the state file which we will update with the new IPs for the next steps
-        self._clients_configured_state_file = self._network_dir + "configured_clients.state"
+        self._clients_configured_state_file = self._deploy_dir + "configured_clients.state"
         next_state = state_file.clone(self._clients_configured_state_file)
 
         if state_file.is_done():
@@ -378,7 +338,7 @@ class DropshipNetwork():
                 client_inv.set_group_metadata(template_group, 'template', template_name)
 
                 # Create the directory to store the module's Ansible files
-                ansible_dir = self._network_dir + "/" + template_name
+                ansible_dir = self._bootstrap_dir + "/" + template_name
                 if not os.path.exists(ansible_dir):
                     os.mkdir(ansible_dir)
 
@@ -443,7 +403,7 @@ class DropshipNetwork():
         client_inv.set_global_var('ansible_winrm_server_cert_validation', 'ignore')
         
 
-        client_inventory_path = self._network_dir + "bootstrap_client_inventory.yml"
+        client_inventory_path = self._bootstrap_dir + "bootstrap_client_inventory.yml"
         client_inv.to_file(client_inventory_path)
 
         base_playbook = BasePlaybook()
@@ -470,7 +430,7 @@ class DropshipNetwork():
                 }
             )
 
-        base_playbook_path = self._network_dir + "bootstrap_base_playbook.yml"
+        base_playbook_path = self._bootstrap_dir + "bootstrap_base_playbook.yml"
         base_playbook.to_file(base_playbook_path)
 
         result = self._dropship.run_ansible(client_inventory_path, base_playbook_path)
@@ -488,6 +448,7 @@ class DropshipNetwork():
 
     def bootstrap(self):
         # Bootstrap output directories
+
         self._network_dir = dropship.constants.OutDir + "/" + self.name + "/"
         if not os.path.exists(self._network_dir):
             os.mkdir(self._network_dir)
@@ -495,6 +456,14 @@ class DropshipNetwork():
         self._bootstrap_dir = dropship.constants.OutDir + "/" + self.name + "/bootstrap/"
         if not os.path.exists(self._bootstrap_dir):
             os.mkdir(self._bootstrap_dir)
+
+        self._deploy_dir = dropship.constants.OutDir + "/" + self.name + "/deploy/"
+        if not os.path.exists(self._deploy_dir):
+            os.mkdir(self._deploy_dir)
+
+        self._post_dir = dropship.constants.OutDir + "/" + self.name + "/post/"
+        if not os.path.exists(self._post_dir):
+            os.mkdir(self._post_dir)
 
         # First bootstrap services
 
@@ -507,9 +476,7 @@ class DropshipNetwork():
 
     def deploy(self):
 
-        deploy_dir = dropship.constants.OutDir + "/" + self.name + "/deploy/"
-        if not os.path.exists(self._network_dir):
-            os.mkdir(deploy_dir)
+        
 
         state_file = StateFile(self._clients_configured_state_file)
 

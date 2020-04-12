@@ -1,5 +1,9 @@
 - name: Wait for router to come online
-  wait_for_connection:
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
 - name: Write the router host key to known hosts
   connection: local
   shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
