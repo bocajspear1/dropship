@@ -1,0 +1,10 @@
+- name: Wait for server to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+- name: Write the host key to known hosts
+  delegate_to: localhost
+  shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
+  become: no

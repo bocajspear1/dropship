@@ -118,10 +118,15 @@ class Dropship():
 
 
         for network in self.networks:
-            network.bootstrap()
+            ok = network.bootstrap()
+            if not ok:
+                return False
 
         # Deploy the routers
         self._deploy_routers()
+
+        for network in self.networks:
+            network.deploy()
 
     def get_address_map(self, mac_list):
         out_map = {}

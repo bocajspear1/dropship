@@ -18,6 +18,7 @@
   apt:
     pkg:
     - dnsmasq
+    - dnsmasq-base
     update_cache: yes
 - name: Set server hostname
   shell: "hostnamectl set-hostname {{ inventory_hostname }}"

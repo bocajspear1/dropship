@@ -96,6 +96,22 @@ class NodeObj():
     def get_status(self):
         return self._base.auth_get("{}/status".format(self._node_path()))
 
+    def snapshot_vm(self, vmid, snapname):
+        snapname = snapname.replace(" ", "_")
+        error, data = self._base.auth_get("{}/qemu/{}/snapshot/{}/config".format(self._node_path(), vmid, snapname))
+        
+        if error is not None:
+            error, data = self._base.auth_post("{}/qemu/{}/snapshot".format(self._node_path(), vmid), {
+                "snapname": snapname,
+                "vmstate": 1
+            })
+            if error is None:
+                self.tasks.append(data)
+                return None, True
+            else:
+                return error, None
+        else:
+            return None, True
 
     def wait_tasks(self):
         if len(self.tasks) == 0:
@@ -172,7 +188,10 @@ class Proxmox():
         if status == 200:
             return None, resp.json()['data']
         else:
-            return resp.json()['errors'], None
+            if 'errors' in resp.json():
+                return resp.json()['errors'], None
+            else:
+                return "An unspecified error occured", None
 
     def auth_delete(self, path):
 
@@ -193,7 +212,10 @@ class Proxmox():
         if status == 200:
             return None, resp.json()['data']
         else:
-            return resp.json()['errors'], None
+            if 'errors' in resp.json():
+                return resp.json()['errors'], None
+            else:
+                return "An unspecified error occured", None
 
     def connect(self, username, password):
         self._username = username
@@ -245,6 +267,9 @@ class ProxmoxProvider():
 
     def has_template(self, template_name):
         pass
+
+    def snapshot_vm(self, vmid, snapname):
+        return self._node.snapshot_vm(vmid, snapname)
 
     def clone_vm(self, template, new_name):
         if template not in self._vm_map:

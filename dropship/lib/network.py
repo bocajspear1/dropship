@@ -5,7 +5,7 @@ import shutil
 import time
 
 import dropship.constants
-from dropship.lib.helpers import StateFile, DropshipInventory, BasePlaybook
+from dropship.lib.helpers import StateFile, DropshipInventory, BasePlaybook, DoneFile
 
 import logging
 logger = logging.getLogger('dropship')
@@ -18,6 +18,7 @@ class DropshipNetwork():
         
         # Network data
         self.domain = ""
+        self.domain_short = ""
         self.domain_admin = ""
         self.admin_password = ""
         self.ip_range = ipaddress.ip_network(ip_range)
@@ -38,6 +39,8 @@ class DropshipNetwork():
 
         self._clients_configured_state_file = ""
         self._services_configured_state_file = ""
+
+        self.pre_deploy_snapshot = False
 
     def set_dns_forwarder(self, server):
         self.dns_forwarder = server
@@ -60,8 +63,10 @@ class DropshipNetwork():
 
     def setup_domain(self, domain, admin, admin_password):
         self.domain = domain
+        self.domain_short = self.domain.split(".")[0]
         self.domain_admin = admin
         self.admin_password = admin_password
+        return True
 
     def add_dc(self, template, dc_name, ip_addr):
         # domain_module = self._dropship.load_module(template)
@@ -165,14 +170,14 @@ class DropshipNetwork():
             system_name = server['system_name']
             template = server['template']
             template_module = self._dropship.get_module(template)
-            template_name = template_module.__IMAGE__.replace(".", "_")
+            template_name = template_module.__IMAGE__
 
             vmid, mac_addr, ip_addr = state_file.get_system(system_name)
 
             username, password = self._dropship.get_image_credentials(template_module.__IMAGE__)
 
             # Group systems of same template under a host group
-            template_group = "{}_bootstrap".format(template_name)
+            template_group = template.replace(".", "_") + "_deploy"
 
             if not services_inv.has_group(template_group):
                 services_inv.add_group(
@@ -185,7 +190,7 @@ class DropshipNetwork():
                 services_inv.set_group_metadata(template_group, 'template', template_name)
 
                 # Create the directory to store the module's Ansible files
-                ansible_dir = self._bootstrap_dir + "/" + template_name
+                ansible_dir = self._bootstrap_dir + "/" + template
                 if not os.path.exists(ansible_dir):
                     os.mkdir(ansible_dir)
 
@@ -230,14 +235,15 @@ class DropshipNetwork():
 
                 services_inv.add_group_var(template_group, 'ansible_become_user', template_module.__BECOME_USER__)
                 services_inv.add_group_var(template_group, 'ansible_become_method', template_module.__BECOME_METHOD__)
-                if template_module.__BECOME_METHOD__ == "sudo":
-                    services_inv.add_group_var(template_group, 'ansible_become_pass', password)
+                
+                services_inv.add_group_var(template_group, 'ansible_become_pass', password)
 
             new_ip = server['ip_addr']
             
             host_vars = {
                 "new_ip" : new_ip
             }
+            next_state.set_ip(system_name, new_ip)
 
             services_inv.add_host(template_group, system_name, ip_addr, vars=host_vars)
         
@@ -318,14 +324,14 @@ class DropshipNetwork():
             system_name = server['system_name']
             template = server['template']
             template_module = self._dropship.get_module(template)
-            template_name = template_module.__IMAGE__.replace(".", "_")
+            template_name = template_module.__IMAGE__
 
             vmid, mac_addr, ip_addr = state_file.get_system(system_name)
 
             username, password = self._dropship.get_image_credentials(template_module.__IMAGE__)
 
             # Group systems of same template under a host group
-            template_group = "{}_bootstrap".format(template_name)
+            template_group = template.replace(".", "_") + "_deploy"
 
             if not client_inv.has_group(template_group):
                 client_inv.add_group(
@@ -338,7 +344,7 @@ class DropshipNetwork():
                 client_inv.set_group_metadata(template_group, 'template', template_name)
 
                 # Create the directory to store the module's Ansible files
-                ansible_dir = self._bootstrap_dir + "/" + template_name
+                ansible_dir = self._bootstrap_dir + "/" + template
                 if not os.path.exists(ansible_dir):
                     os.mkdir(ansible_dir)
 
@@ -474,13 +480,175 @@ class DropshipNetwork():
         else:
             return ok
 
-    def deploy(self):
+
+    def _deploy_services(self):
 
         
 
-        state_file = StateFile(self._clients_configured_state_file)
-
+        state_file = StateFile(self._services_configured_state_file)
         state_file.from_file()
+
+        if state_file.is_done():
+            logger.warning("Deployment for services already done")
+            return True
+
+        services_deploy_inventory = DropshipInventory()
+
+        for server in self.services:
+
+             
+            system_name = server['system_name']
+
+            done_file = DoneFile(self._deploy_dir + system_name + ".done")
+
+            if done_file.is_done():
+                logger.warning("Deployment for system {} already done".format(system_name))
+                continue
+
+            template = server['template']
+            template_module = self._dropship.get_module(template)
+            template_group = template.replace(".", "_") + "_deploy"
+
+            vmid, mac_addr, ip_addr = state_file.get_system(system_name)
+
+            # If we want pre-deployment snapshots, make them
+            if self.pre_deploy_snapshot:
+                error, ok = self._dropship.provider.snapshot_vm(vmid, "pre_configure")
+
+                if error is not None:
+                    logger.error("Snapshot failed! - {}".format(error))
+                    return False
+                
+                logger.info("Waiting for snapshot to complete...")
+                self._dropship.provider.wait()
+
+            system_vars = {}
+
+            if not services_deploy_inventory.has_group(template_group):
+                username, password = self._dropship.get_image_credentials(template_module.__IMAGE__)
+                services_deploy_inventory.add_group(
+                    template_group, 
+                    template_module.__OSTYPE__, 
+                    template_module.__METHOD__, 
+                    username, 
+                    password
+                )
+
+                # Create the directory to store the module's Ansible files
+                ansible_dir = self._deploy_dir + "/" + template
+                if not os.path.exists(ansible_dir):
+                    os.mkdir(ansible_dir)
+
+                # Get the module's bootstrap.yml file
+                ansible_bootstrap = template_module.get_dir() + "/deploy.yml"
+                deploy_file = ansible_dir + "/deploy.yml"
+                # Copy the bootstrap file to our working directory
+                shutil.copyfile(ansible_bootstrap, deploy_file)
+
+                # Get the module's reboot.yml file
+                ansible_reboot = template_module.get_dir() + "/reboot.yml"
+                reboot_file = ansible_dir + "/reboot.yml"
+                # Copy the reboot file to our working directory
+                shutil.copyfile(ansible_reboot, reboot_file)
+
+                services_deploy_inventory.set_group_metadata(template_group, 'ansible_dir', ansible_dir)
+                services_deploy_inventory.set_group_metadata(template_group, 'deploy', deploy_file)
+                services_deploy_inventory.set_group_metadata(template_group, 'reboot', reboot_file)
+                services_deploy_inventory.set_group_metadata(template_group, 'template', template)
+
+                services_deploy_inventory.add_group_var(template_group, 'ansible_become_user', template_module.__BECOME_USER__)
+                services_deploy_inventory.add_group_var(template_group, 'ansible_become_method', template_module.__BECOME_METHOD__)
+                services_deploy_inventory.add_group_var(template_group, 'ansible_become_pass', password)
+
+            
+            services_deploy_inventory.add_host(
+                template_group, 
+                system_name,
+                ip_addr,
+                vars=system_vars
+            )
+
+        services_deploy_inventory.set_global_var('new_prefix', self.ip_range.prefixlen)
+        services_deploy_inventory.set_global_var('new_mask', str(self.ip_range.netmask))
+        services_deploy_inventory.set_global_var('network_ext_dns', self.dns_forwarder)
+        services_deploy_inventory.set_global_var('network_int_dns', self.network_int_dns)
+        services_deploy_inventory.set_global_var('network_gateway', str(list(self.ip_range.hosts())[0]))
+        services_deploy_inventory.set_global_var('domain_long', self.domain)
+        services_deploy_inventory.set_global_var('domain_short', self.domain_short)
+        services_deploy_inventory.set_global_var('domain_admin_pass', self.admin_password)
+        services_deploy_inventory.set_global_var('ansible_become', 'yes')
+
+        services_inv_path = self._deploy_dir + "deploy_inventory.yml"
+        services_deploy_inventory.to_file(services_inv_path)
+
+        logger.info("Inventory file for services deployment created!")
+
+        base_playbook = BasePlaybook()
+
+        for group_name in services_deploy_inventory.group_list():
+            
+            base_playbook.add_group(
+                group_name,
+                "Deploy {} services".format(services_deploy_inventory.get_group_metadata(group_name,'template'))
+            )
+
+            base_playbook.add_task(
+                group_name,
+                {
+                    "include_tasks": os.path.abspath(services_deploy_inventory.get_group_metadata(group_name,'deploy')),
+                    "name": "Run deploy file"
+                }
+            )
+            base_playbook.add_task(
+                group_name,
+                {
+                    "include_tasks": os.path.abspath(services_deploy_inventory.get_group_metadata(group_name,'reboot')),
+                    "name": "Run reboot file"
+                }
+            )
+            base_playbook.add_task(
+                group_name,
+                {
+                    "become": "no",
+                    "delegate_to": "localhost",
+                    "shell": "touch " + os.path.abspath(self._deploy_dir) + "/{{ inventory_hostname }}.done",
+                    "name": "Create the system done file",
+                    "warn": False
+                }
+            )
+
+        base_playbook_path = self._deploy_dir + "base_playbook.yml"
+        base_playbook.to_file(base_playbook_path)
+
+        logger.info("Base playbook file for services deployment created!")
+
+        logger.info("Running Ansible...")
+
+        result = self._dropship.run_ansible(services_inv_path, base_playbook_path)
+
+        if result != 0:
+            logger.error("Service bootstrap Ansible failed! Please refer to Ansible output for error details.")
+            return False
+
+        return True
+
+
+    def deploy(self):
+
+        
+        logger.info("Setting interface to {} network switch".format(self.name))
+        self._dropship.provider.set_interface(
+            self._dropship.config['commander']['vmid'], 
+            self._dropship.config['commander']['interface'], 
+            self.switch_id
+        )   
+
+        ok = self._deploy_services()
+        
+
+        # state_file = StateFile(self._clients_configured_state_file)
+
+        # state_file.from_file()
 
         # post_dir = dropship.constants.OutDir + "/" + self.name + "/post"
         # os.mkdir(post_dir)

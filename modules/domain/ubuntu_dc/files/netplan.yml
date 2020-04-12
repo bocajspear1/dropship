@@ -6,4 +6,4 @@ network:
             addresses: [{{ new_ip }}/{{ new_prefix }}, ]
             gateway4:  {{ network_gateway }}
             nameservers:
-                    addresses: [{{ network_ext_dns }}]
+                    addresses: [{{ network_int_dns }}]
