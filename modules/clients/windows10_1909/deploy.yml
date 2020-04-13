@@ -1,0 +1,11 @@
+- name: Wait for client to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 5986
+    timeout: 600
+- name: Connect to domain
+  win_command: powershell.exe -exec bypass -Command "$p = '{{ hostvars[inventory_hostname]['domain_admin_pass'] }}' | ConvertTo-SecureString -asPlainText -Force; $c = New-Object System.Management.Automation.PSCredential('{{ hostvars[inventory_hostname]['domain_short']|upper }}\Administrator',$p); Add-Computer -DomainName {{ hostvars[inventory_hostname]['domain_long']|lower }} –credential $c"
+
+  
