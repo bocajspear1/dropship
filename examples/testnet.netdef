@@ -1,0 +1,11 @@
+NETWORK testnet
+RANGE 192.168.x.0/24
+ROUTER gateway networking.vyos EXTERNAL=dhcp testnet=192.168.x.1
+DOMAIN "HACKNET.fake" "Administrator" "2h@cktheNet!"
+HOST testdc domain.ubuntu_dc_20_04 192.168.x.2
+HOST test clients.windows10_1909 dhcp
+HOST test services.ubuntu_dhcp 192.168.x.3
+VAR dhcp_range_start ...
+VAR dhcp_range_end ...
+
+POSTMOD testdc post.vuln1 var1=sadfadsf 

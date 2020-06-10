@@ -4,13 +4,10 @@
   wait_for:
     host: "{{ ansible_host }}"
     port: 22
-- name: Write the host key to known hosts
-  delegate_to: localhost
-  shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
-  become: no
-- name: Copy DHCP collection script
-  copy:
-    src: +TEMPLATES+/dnsmasq_dhcp_collect.sh
-    dest: /tmp/dnsmasq_dhcp_collect.sh
-- name: Run DHCP collection script
-  shell: chmod +x /tmp/dnsmasq_dhcp_collect.sh;/tmp/dnsmasq_dhcp_collect.sh
+- name: Parse DHCP lease file
+  shell: cat /var/lib/misc/dnsmasq.leases | cut -d ' ' -f2,3 | sed 's_ _|_g' > /tmp/dhcp.txt
+- name: Collect dhcp.txt file
+  fetch: 
+    dest: "{{ dhcp_output_dir }}"
+    src: /tmp/dhcp.txt
+    flat: yes

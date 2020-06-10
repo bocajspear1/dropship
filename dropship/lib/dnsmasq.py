@@ -4,11 +4,16 @@ import logging
 import getpass
 import time
 
+from dropship.lib.helpers import get_command_path
+
 logger = logging.getLogger('dropship')
 
 # Controls and managers DNSmasq for Dropship
 # 
-# dnsmasq provides the DHCP required to get initial access to the cloned VMs
+# dnsmasq provides the DHCP required to get initial access to the cloned VMs.
+# Dropship reads the DHCP lease file, then matches the VMs based on MAC address.
+# Once all systems are bootstrapped, the dnsmasq service is stopped so to not interfere with 
+# the new network's DHCP, it it is configured.
 #
 class DropshipDNSMasq():
 
@@ -23,11 +28,16 @@ class DropshipDNSMasq():
             self.stop()
             time.sleep(2)
 
-        dnsmasqPath = subprocess.check_output(["/bin/sh", '-c', 'which dnsmasq']).strip().decode()
+        sudo_path = get_command_path('sudo')
+        dnsmasq_path = get_command_path('dnsmasq')\
+        
+        if dnsmasq_path == "":
+            logger.error("dnsmasq path is empty. Is dnsmasq installed?")
+            return False
 
         sudo_command = [
-            "/usr/bin/sudo",
-            dnsmasqPath,
+            sudo_path,
+            dnsmasq_path,
             "--strict-order",
             "--bind-interfaces",
             "--log-facility=/tmp/ds-dnsmasq.log",

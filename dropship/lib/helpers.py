@@ -1,6 +1,8 @@
 import os
 from datetime import datetime
 import copy
+import subprocess
+import importlib
 
 from yaml import load, dump
 try:
@@ -8,7 +10,33 @@ try:
 except ImportError:
     from yaml import Loader, Dumper
 
-# Stores data about in process deployments
+class ModuleManager():
+    def __init__(self, module_path="./modules"):
+        self._module_cache = {}
+        self._module_path = module_path
+
+    def get_module(self, module_name):
+        if module_name in self._module_cache:
+            return self._module_cache[module_name]
+
+        module_split = module_name.split(".")
+        category = module_split[0]
+        name = module_split[1]
+
+        start = self._module_path.replace("./", "").replace("/", ".")
+
+        temp = importlib.import_module(start + "." + category + "." + name)
+
+        module = temp.__MODULE__()
+
+        self._module_cache[module_name] = module
+
+        return module
+
+def get_command_path(command):
+    return subprocess.check_output(["/bin/sh", '-c', 'which {}'.format(command)]).strip().decode()
+
+# Essentially just a flag indicating if a system has been bootstrapped/deployed
 class DoneFile():
     def __init__(self, path):
         self.path = path
@@ -89,6 +117,19 @@ class StateFile():
         for i in range(len(self.lines)):
             if self.lines[i][0] == system_name:
                 self.lines[i][3] = ip_addr
+                return True
+        return False
+
+    def set_ip_by_mac(self, mac, ip_addr):
+        for i in range(len(self.lines)):
+            if self.lines[i][2].lower() == mac.lower():
+                self.lines[i][3] = ip_addr
+                return True
+        return False
+
+    def has_dhcp(self):
+        for i in range(len(self.lines)):
+            if self.lines[i][3].lower() == 'dhcp':
                 return True
         return False
 

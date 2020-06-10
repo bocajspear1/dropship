@@ -5,7 +5,7 @@ class Windows1909Client(BaseModule):
     __DESC__ = "Windows 10 1909"
     __IMAGE__ = "client.windows.windows10_1909"
     __VARS__ = [""]
-    __PROVIDES__ = "client"
+    __ROLE__ = "client"
     __METHOD__ = "winrm"
     __OSTYPE__ = "windows"
     __BOOTSTRAP_FILES__ = []

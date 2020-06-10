@@ -43,3 +43,10 @@
   shell: echo -e "nameserver {{ hostvars[inventory_hostname]['network_int_dns'] }}\nsearch {{ hostvars[inventory_hostname]['domain_long']|lower }}\n"  > /etc/resolv.conf  
 - name: Add DNS forwarder to Samba DNS
   shell: echo "dns forwarder = hostvars[inventory_hostname]['network_ext_dns']" >> /etc/samba/smb.conf
+- name: Restart Samba AD DC service
+  systemd:
+    state: reloaded
+    name: samba-ad-dc
+- name: Add Users
+  loop: "{{ network_users }}"
+  shell: samba-tool user create {{ item.username }} '{{ item.password }}' --surname="{{ item.lastname }}"" --given-name="{{ item.firstname }}"

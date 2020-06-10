@@ -8,3 +8,11 @@
   delegate_to: localhost
   shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
   become: no
+- name: Configure Dnsmasq
+  template:
+    src: +FILES+/dnsmasq.conf
+    dest: /etc/dnsmasq.conf
+- name: Restart Dnsmasq
+  systemd:
+    name: dnsmasq
+    state: reloaded

@@ -1,0 +1,4 @@
+NETINSTANCE testnet
+SWITCH vmbr5
+PREFIX test_
+OCTET x 1

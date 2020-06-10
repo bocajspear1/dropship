@@ -1,6 +1,5 @@
 import json
 import shutil 
-import importlib
 import time
 import os
 import copy
@@ -26,13 +25,13 @@ from dropship.lib.helpers import StateFile, DropshipInventory, BasePlaybook, Don
 
 class Dropship():
     
-    def __init__(self, provider_name, config_path, module_path="./modules"):
+    def __init__(self, provider_name, config_path):
         if provider_name not in ["proxmox"]:
             raise ValueError("Provider '{}' not supported".format(provider_name))
         
         self._provider_name = provider_name
         self._config_path = config_path
-        self._module_path = module_path
+        
         self.networks = []
         self.routers = []
 
@@ -40,7 +39,7 @@ class Dropship():
             "EXTERNAL": []
         }
         
-        self._module_cache = {}
+        
 
         # TODO
 
@@ -55,23 +54,7 @@ class Dropship():
     def set_external_switch(self, external_switch):
         self.external_switch = external_switch
 
-    def get_module(self, module_name):
-        if module_name in self._module_cache:
-            return self._module_cache[module_name]
-
-        module_split = module_name.split(".")
-        category = module_split[0]
-        name = module_split[1]
-
-        start = self._module_path.replace("./", "").replace("/", ".")
-
-        temp = importlib.import_module(start + "." + category + "." + name)
-
-        module = temp.__MODULE__()
-
-        self._module_cache[module_name] = module
-
-        return module
+    
 
     def add_network(self, name, switch_id, ip_range):
         net = DropshipNetwork(self, name, switch_id, ip_range)
@@ -100,23 +83,24 @@ class Dropship():
     def connect(self, username, password):
         self.provider.connect(username, password)
 
-    # Create the Ansible files
-    def bootstrap(self):
-        self.dnsmasq.start()
-
+    # Run Dropship and configure everything!
+    def execute(self):
         
+        # Ensure the output directory has been created
         if not os.path.exists(dropship.constants.OutDir):
             os.mkdir(dropship.constants.OutDir)
-
 
         # Connect the interface up to the bootstrap switch
         bootstrap_switch = self.config['bootstrap']['switch']
         self.provider.set_interface(self.config['commander']['vmid'], self.config['commander']['interface'], bootstrap_switch)
 
+        # Start DNSMasq to provide temporary addresses
+        self.dnsmasq.start()
+
         # Bootstrap the routers
         self._bootstrap_routers()
 
-
+        # Bootstrap each network
         for network in self.networks:
             ok = network.bootstrap()
             if not ok:
@@ -125,6 +109,10 @@ class Dropship():
         # Deploy the routers
         self._deploy_routers()
 
+        # Stop DNSmasq
+        self.dnsmasq.stop()
+
+        # Deploy each network
         for network in self.networks:
             network.deploy()
 
