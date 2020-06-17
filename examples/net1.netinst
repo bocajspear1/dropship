@@ -2,3 +2,4 @@ NETINSTANCE testnet
 SWITCH vmbr5
 PREFIX test_
 OCTET x 1
+VAR network_dns_forwarder 1.1.1.1

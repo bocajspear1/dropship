@@ -15,6 +15,13 @@ class DropshipNetwork():
         self.name = name
         self.switch_id = switch_id
         self._dropship = dropship
+
+        self._vars = {}
+        self._hosts = {}
+        self._users = {}
+        
+
+        
         
         # Network data
         self.domain = ""
