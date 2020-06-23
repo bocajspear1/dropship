@@ -10,10 +10,14 @@ try:
 except ImportError:
     from yaml import Loader, Dumper
 
+import logging
+logger = logging.getLogger('dropship')
+
 class ModuleManager():
-    def __init__(self, module_path="./modules"):
+    def __init__(self, out_path, module_path="./modules"):
         self._module_cache = {}
         self._module_path = module_path
+        self.out_path =out_path
 
     def get_module(self, module_name):
         if module_name in self._module_cache:
@@ -32,6 +36,7 @@ class ModuleManager():
         self._module_cache[module_name] = module
 
         return module
+
 
 def get_command_path(command):
     return subprocess.check_output(["/bin/sh", '-c', 'which {}'.format(command)]).strip().decode()
@@ -227,6 +232,35 @@ class DropshipInventory():
         
         out_file.write(inv_data_out)
         out_file.close()
+
+    def from_host_list(self, mm, cred_map, host_list, name_prefix=""):
+        for host in host_list:
+            host_mod = mm.get_module(host.module_name)
+            host_mod_group = host_mod.__NAME_NORMALIZED__
+
+            if not self.has_group(host_mod_group):
+                username = None
+                password = None
+                if host_mod.__IMAGE__ in cred_map:
+                    cred_split = cred_map[host_mod.__IMAGE__].split(":")
+                    username = cred_split[0]
+                    password = cred_split[1]
+                else:
+                    logger.error("Could not find credentials for image '{}'".format(host_mod.__IMAGE__))
+                    return False
+                self.add_group(
+                    host_mod_group, 
+                    host_mod.__OSTYPE__, 
+                    host_mod.__METHOD__,
+                    username,
+                    password
+                )
+                self.set_group_metadata(host_mod_group, 'bootstrap_path', host_mod.get_bootstrap_path(mm.out_path))
+                self.set_group_metadata(host_mod_group, 'reboot_path', host_mod.get_reboot_path(mm.out_path))
+                self.set_group_metadata(host_mod_group, 'deploy_path', host_mod.get_deploy_path(mm.out_path))
+            
+            self.add_host(host_mod_group, "{}{}".format(name_prefix, host.hostname), host.connect_ip, vars=host.vars)
+            
 
 
 class BasePlaybook():

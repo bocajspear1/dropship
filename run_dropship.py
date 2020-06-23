@@ -2,10 +2,13 @@ import shlex
 import argparse
 import logging
 import sys
+import os
+import getpass
 
 import dropship
 from dropship.lib.netdef import NetworkDefinition
 from dropship.lib.helpers import ModuleManager
+from dropship.lib.builder import DropshipBuilder
 
 logger = logging.getLogger('dropship')
 
@@ -25,17 +28,18 @@ def parse_section(section):
 def create_instance(def_map, inst_data):
 
     lines = inst_data.split("\n")
-    if lines[0].startswith("NETINSTANCE"):
-        netinst_split = shlex.split(lines[0], " ")
-        if len(netinst_split) != 2:
-            logger.error("Invalid NETINSTANCE line: '{}'".format(lines[0]))
-            sys.exit(4)
-        def_name = netinst_split[1]
-        if def_name not in def_map:
-            logger.error("Instance references definition '{}' that has not been defined".format(def_name))
-            sys.exit(4)
-        
-        return def_map[def_name].create_instance(inst_data)
+    for line in lines:
+        if line.startswith("INSTOF"):
+            netinst_split = shlex.split(line, " ")
+            if len(netinst_split) != 2:
+                logger.error("Invalid INSTOF line: '{}'".format(line))
+                sys.exit(4)
+            def_name = netinst_split[1]
+            if def_name not in def_map:
+                logger.error("Instance references definition '{}' that has not been defined".format(def_name))
+                sys.exit(4)
+            
+            return def_map[def_name].create_instance(inst_data)
         
     else:
         logger.error("Could not find NETINSTANCE on first line")
@@ -60,6 +64,16 @@ def main():
         logger.info('Starting a Dropship run...')
         def_map = {}
         inst_map = {}
+
+        config_path = "./config.json"
+        if args.config is not None:
+            config_path = args.config
+
+        if not os.path.exists(config_path):
+            logger.error("Path to config file '{}' not found".format(config_path))
+            sys.exit(1)
+        
+        builder = DropshipBuilder(config_path)
 
         logger.debug("Loading network definition from '{}'".format(args.defi))
 
@@ -130,10 +144,20 @@ def main():
 
         for instance in inst_map:
             inst_map[instance].describe()
+            builder.add_instance(instance, inst_map[instance])
+        
+        builder.init_provider()
 
+        if not builder.provider.has_cache():
+            username = input("Provider username> ")
+            password = getpass.getpass("Provider password> ")
+            builder.provider.connect(username, password)
+        else:
+            builder.provider.connect_cache()
+        builder.run_build()
 
     elif args.list is not None:
-        mm = ModuleManager()
+        mm = ModuleManager("./out")
         
 
 if __name__ == '__main__':

@@ -9,5 +9,9 @@ class VyosRouter(BaseModule):
     __METHOD__ = "network_cli"
     __OSTYPE__ = "vyos"
 
+    def get_interface_name(self, interface_num):
+        return "eth{}".format(interface_num)
+
+
 
 __MODULE__ = VyosRouter

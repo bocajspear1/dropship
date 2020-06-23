@@ -4,7 +4,7 @@ import re
 
 from dropship.lib.helpers import ModuleManager
 from dropship.lib.netinst import NetworkInstance
-from dropship.lib.host import Host
+from dropship.lib.host import Host, Router
 
 logger = logging.getLogger('dropship')
 
@@ -21,9 +21,9 @@ class NetworkDefinition():
         self._domain = None
         self._hosts = []
         if module_path is None:
-            self.mm = ModuleManager()
+            self.mm = ModuleManager("./out")
         else:
-            self.mm = ModuleManager(module_path=module_path)
+            self.mm = ModuleManager("./out", module_path=module_path)
 
     def parse(self):
         lines = self._def_data.split("\n")
@@ -81,7 +81,7 @@ class NetworkDefinition():
                 if mod_role not in self._seen_roles:
                     self._seen_roles.append(mod_role)
 
-                host = Host(hostname, mod_name, ip_addr, mod_role)
+                host = Host(hostname, self.name, mod_name, ip_addr, mod_role)
 
                 self._hosts.append(host)
                 
@@ -110,10 +110,12 @@ class NetworkDefinition():
         
         inst_vars = {}
         inst_name = None
+        inst_of = None
         inst_switch = None
         inst_prefix = ""
         inst_range = self.range
         octets = {}
+        routers = []
 
         for line in lines:
             line = line.strip()
@@ -125,6 +127,38 @@ class NetworkDefinition():
                     logger.error("Invalid NETINSTANCE line: '{}'".format(line))
                     return None
                 inst_name = line_split[1]
+            if line_split[0] == "INSTOF":
+                if len(line_split) != 2:
+                    logger.error("Invalid INSTOF line: '{}'".format(line))
+                    return None
+                inst_of = line_split[1]
+            if line_split[0] == "ROUTER":
+                if len(line_split) < 3:
+                    logger.error("Invalid ROUTER line: '{}'".format(line))
+                    return None
+                router_name = line_split[1]
+                router_module = line_split[2]
+                router_interfaces = line_split[3:]
+
+                mod_obj = self.mm.get_module(router_module)
+                if mod_obj.__ROLE__ != "router":
+                    logger.error("Module '{}' is not role 'router'".format(router_module))
+                    return None
+
+                router = Router(router_name, router_module)
+                for iface in router_interfaces:
+                    if "=" not in iface:
+                        logger.error("Invalid ROUTER line: '{}', invalid interface definition".format(line))
+                        return None
+                    iface_split = iface.split("=")
+                    if iface_split[1].isnumeric():
+                        router.add_interface(iface_split[0], offset=iface_split[1])
+                    else:
+                        router.add_interface(iface_split[0], ip_addr=iface_split[1])
+
+
+                routers.append(router)
+
             elif line_split[0] == "SWITCH":
                 if len(line_split) != 2:
                     logger.error("Invalid SWITCH line: '{}'".format(line))
@@ -152,10 +186,17 @@ class NetworkDefinition():
         if inst_name is None:
             logger.error("Instance does not have a name".format(line))
             return None
+        if inst_of is None:
+            logger.error("Instance does not have a network its defining".format(line))
+            return None
         if inst_switch is None:
             logger.error("Instance does not have a switch".format(line))
             return None
-        netinst = NetworkInstance(self.name, inst_switch, inst_range, prefix=inst_prefix)
+        netinst = NetworkInstance(inst_name, self.name, inst_switch, inst_range, prefix=inst_prefix)
+
+        # Add routers to the network instance
+        for router in routers:
+            netinst.add_host(router)
 
         # Add hosts to the network instance
         for host in self._hosts:

@@ -1,4 +1,6 @@
-NETINSTANCE testnet
+NETINSTANCE test
+INSTOF testnet
+ROUTER gateway networking.vyos EXTERNAL=dhcp test=1
 SWITCH vmbr5
 PREFIX test_
 OCTET x 1

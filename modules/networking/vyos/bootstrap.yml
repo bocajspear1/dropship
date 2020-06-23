@@ -17,7 +17,7 @@
   vyos_config:
     lines:
       - delete interfaces ethernet {{ item.iface }} address dhcp
-      - set interfaces ethernet {{ item.iface }} address {{ item.addr }}
+      - set interfaces ethernet {{ item.iface }} address {{ item.addr }}/{{ item.prefix }}
     save: yes
   loop: "{{ hostvars[inventory_hostname]['interfaces'] }}"
-  when: "'interfaces' in hostvars[inventory_hostname]"
+  when: "'interfaces' in hostvars[inventory_hostname] and item.addr != 'dhcp'" 

@@ -11,15 +11,16 @@ import logging
 logger = logging.getLogger('dropship')
 
 class NetworkInstance():
-    def __init__(self, defname, switch_id, ip_range, prefix=""):
+    def __init__(self, instname, defname, switch_id, ip_range, prefix=""):
         self.defname = defname
-        self.name = "{}{}_{}".format(prefix, defname, int(time.time()))
+        self.name = instname
         self.switch_id = switch_id
         self.ip_range = ipaddress.ip_network(ip_range)
         
         self._vars = {}
 
         self._hosts = {}
+        self._routers = {}
         self._users = {}
 
         self._network_dir = ""
@@ -29,6 +30,10 @@ class NetworkInstance():
 
         self._clients_configured_state_file = ""
         self._services_configured_state_file = ""
+
+    @property
+    def vars(self):
+        return self._vars
 
     def describe(self):
         print("Network instance '{}'".format(self.name))
@@ -58,5 +63,21 @@ class NetworkInstance():
 
         return True
 
-    def do_build(self, dropship):
+    def get_clients(self):
+        return_list = []
+        for hostname in self._hosts:
+            if self._hosts[hostname].role in ("client",):
+                return_list.append(self._hosts[hostname])
+        
+        return return_list
+
+    def get_routers(self):
+        return_list = []
+        for hostname in self._hosts:
+            if self._hosts[hostname].role == "router":
+                return_list.append(self._hosts[hostname])
+        
+        return return_list
+
+    def do_bootstrap(self, dropship):
         pass

@@ -19,10 +19,7 @@ class DropshipNetwork():
         self._vars = {}
         self._hosts = {}
         self._users = {}
-        
 
-        
-        
         # Network data
         self.domain = ""
         self.domain_short = ""

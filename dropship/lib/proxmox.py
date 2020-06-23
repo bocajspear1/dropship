@@ -2,6 +2,8 @@ import requests
 import time
 import logging
 import re
+import os
+import stat
 
 logger = logging.getLogger('dropship')
 
@@ -217,6 +219,16 @@ class Proxmox():
             else:
                 return "An unspecified error occured", None
 
+    def has_cache(self):
+        return os.path.exists(".pve")
+
+    def load_cache(self):
+        pve_cache = open(".pve", "r")
+        cache_split = pve_cache.read().split("\n")
+        self._token = cache_split[0].strip()
+        self._csrf = cache_split[1].strip()
+        pve_cache.close()
+
     def connect(self, username, password):
         self._username = username
         resp = requests.post("{}/api2/json/access/ticket".format(self._url), data={
@@ -228,6 +240,14 @@ class Proxmox():
         if resp.status_code == 200:
             self._token = resp.json()['data']['ticket']
             self._csrf = resp.json()['data']['CSRFPreventionToken']
+            pve_cache = open(".pve", "w+")
+            pve_cache.close()
+            os.chmod(".pve", stat.S_IRUSR | stat.S_IWUSR)
+
+            pve_cache = open(".pve", "w+")
+            pve_cache.write("{}\n".format(self._token))
+            pve_cache.write("{}\n".format(self._csrf))
+            pve_cache.close()
             logger.info("Proxmox authenticated successfully")
             return True
         else:
@@ -260,10 +280,22 @@ class ProxmoxProvider():
         self._proxmox = Proxmox(self._config['host'], verify_ssl=self._config['verify_ssl'])
         self._node = None
 
+    def has_cache(self):
+        return self._proxmox.has_cache()
+
+    def connect_cache(self):
+        self._proxmox.load_cache()
+        self._node = self._proxmox.Node(self._config['node'])
+
     def connect(self, username, password):
         logger.info("Connecting to {}, using node '{}'".format(self._config['host'], self._config['node']))
         self._proxmox.connect(username, password)
         self._node = self._proxmox.Node(self._config['node'])
+
+    def create_switch(self, switch_name):
+        # For any other provider, this would create a switch.
+        # Sicne Proxmox is silly and doesn't let us do that, this function does nothing
+        return True
 
     def has_template(self, template_name):
         pass
