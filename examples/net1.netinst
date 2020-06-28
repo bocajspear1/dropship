@@ -2,6 +2,6 @@ NETINSTANCE test
 INSTOF testnet
 ROUTER gateway networking.vyos EXTERNAL=dhcp test=1
 SWITCH vmbr5
-PREFIX test_
+PREFIX test-
 OCTET x 1
 VAR network_dns_forwarder 1.1.1.1

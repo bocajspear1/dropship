@@ -54,6 +54,8 @@ class Host():
     def ip_addr(self, set_addr):
         if len(self.interfaces) >= 1:
             self.interfaces[0].ip_addr = set_addr
+        else:
+            print("no interface")
 
     @property
     def mac(self):

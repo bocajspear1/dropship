@@ -1,0 +1,25 @@
+- name: Wait for client to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 5986
+    timeout: 600
+- name: Wait for domain controller to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ network_domain_controller }}"
+    port: 445
+    timeout: 600
+- name: Transfer update package
+  win_copy:
+    dest: C:\rsat.msu
+    src: +FILES+/rsat.msu
+- name: Configure update package (Takes a long time...)
+  win_command: cmd.exe /c "wusa.exe C:\rsat.msu /quiet /norestart" 
+- name: Reboot system
+  shell: 'sleep 2 && shutdown -r now'
+  poll: 0
+  async: 1
+  

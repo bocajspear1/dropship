@@ -28,7 +28,7 @@
   shell: "hostnamectl set-hostname {{ inventory_hostname }}"
 - name: Set a static IP using netplan
   template:
-    src: +TEMPLATES+/netplan.yml
+    src: +FILES+/netplan.yml
     dest: /etc/netplan/01-netcfg.yaml
 - name: Remove cloud init netplan file
   file:

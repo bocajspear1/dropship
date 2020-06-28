@@ -17,8 +17,12 @@
 - name: Install required packages
   apt:
     pkg:
-    - dnsmasq
-    - dnsmasq-base
+    - samba 
+    - krb5-user 
+    - krb5-config 
+    - winbind 
+    - libpam-winbind 
+    - libnss-winbind
     update_cache: yes
 - name: Set server hostname
   shell: "hostnamectl set-hostname {{ inventory_hostname }}"
@@ -30,6 +34,11 @@
   file:
     path: /etc/netplan/50-cloud-init.yaml
     state: absent
+- name: Remove installer init netplan file
+  file:
+    path: /etc/netplan/00-installer-config.yaml
+    state: absent
+
   
     
     

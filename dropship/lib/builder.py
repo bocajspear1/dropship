@@ -98,6 +98,24 @@ class DropshipBuilder():
         self.dnsmasq = DropshipDNSMasq(self.config['bootstrap'])
         self.external_switch = self.config['external_switch_id']
 
+        logger.info("Setting configuration IP on config interface")
+        for instance_name in self._instances:
+            instance = self._instances[instance_name]
+            instance_range = instance.ip_range
+            network_hosts = list(instance_range.hosts())
+            prefix_len = instance_range.prefixlen
+            
+            # Setup the IP for internal network access
+            subprocess.call([
+                "/usr/bin/sudo", 
+                '/sbin/ip',
+                'addr', 
+                'add', 
+                '{}/{}'.format(network_hosts[len(network_hosts)-1], prefix_len),
+                'dev',
+                self.config['bootstrap']['interface']
+            ])
+
         switch_net_map = {}
 
         # Create all switches and get instance routers
@@ -127,6 +145,35 @@ class DropshipBuilder():
 
         self.dnsmasq.start()
         ok = self._bootstrap_routers()
+        if not ok:
+            logger.error("Failed to run bootstrap routers")
+            return False
+
+        for instance_name in self._instances:
+            instance = self._instances[instance_name]
+            ok = instance.run_bootstrap(self)
+            if not ok:
+                logger.error("Failed to run bootstrap for instance '{}'".format(instance_name))
+                return False
+
+        time.sleep(2)
+        self.dnsmasq.stop()
+
+        for instance_name in self._instances:
+            instance = self._instances[instance_name]
+            ok = instance.run_deploy(self)
+            if not ok:
+                logger.error("Failed to run deploy for instance '{}'".format(instance_name))
+                return False
+
+        for instance_name in self._instances:
+            instance = self._instances[instance_name]
+            ok = instance.run_post(self)
+            if not ok:
+                logger.error("Failed to run post for instance '{}'".format(instance_name))
+                return False
+        
+        logger.info("All modules completed successfully!")
 
 
     def _bootstrap_routers(self):
@@ -224,7 +271,7 @@ class DropshipBuilder():
                 self._routers[i].vars['interfaces'] = [
                      {
                         "iface": router_mod.get_interface_name(1),
-                        "addr":  new_ip + "/{}".format(),
+                        "addr":  new_ip,
                         "prefix": str(instance_network.ip_range.prefixlen),
                         "netmask": str(instance_network.ip_range.netmask)
                      }
@@ -241,27 +288,30 @@ class DropshipBuilder():
             for i in range(len(self._routers)):
                 self._routers[i].vars['interfaces'].clear()
                 for j in range(len(self._routers[i].interfaces)):
-                    self._routers[i].connect_ip = self._routers[i].vars['new_ip_set']
-                    del self._routers[i].vars['new_ip_set']
-
-                    iface = self._routers[i].interfaces[j]
+                    
                     # Skip second interface, we are already setting that in the previous step
                     if j == 1:
                         continue
 
+                    self._routers[i].connect_ip = self._routers[i].vars['new_ip_set']
+                    del self._routers[i].vars['new_ip_set']
+
+                    iface = self._routers[i].interfaces[j]
+
                     if iface.has_offset():
                         iface.set_offset_addr(self._instances[iface.network_name].ip_range)
                     
-                    instance_network = self._instances[iface.network_name]
-                    iface_addr = str(iface.ip_addr)
-                    self._routers[i].vars['interfaces'].append(
-                        {
-                            "iface": self.mm.get_module(self._routers[i].module_name).get_interface_name(j),
-                            "addr": iface_addr,
-                            "prefix": str(instance_network.ip_range.prefixlen),
-                            "netmask": str(instance_network.ip_range.netmask)
-                        }
-                    )
+                    if iface.network_name != dropship.constants.ExternalConnection:
+                        instance_network = self._instances[iface.network_name]
+                        iface_addr = str(iface.ip_addr)
+                        self._routers[i].vars['interfaces'].append(
+                            {
+                                "iface": self.mm.get_module(self._routers[i].module_name).get_interface_name(j),
+                                "addr": iface_addr,
+                                "prefix": str(instance_network.ip_range.prefixlen),
+                                "netmask": str(instance_network.ip_range.netmask)
+                            }
+                        )
             
             router_inv = DropshipInventory()
             router_inv.from_host_list(self.mm, self.config['credentials'], self._routers)
@@ -319,32 +369,12 @@ class DropshipBuilder():
 
             logger.info("Inventory files created!")
 
-            
-
             logger.info("Running pre-inventory Ansible")
             result = self.run_ansible(pre_inventory_path, pre_playbook_path)
 
             if result != 0:
                 logger.error("Pre-inventory Ansible failed!")
                 return
-
-            logger.info("Setting configuration IP on config interface")
-            for instance_name in self._instances:
-                instance = self._instances[instance_name]
-                instance_range = instance.ip_range
-                network_hosts = list(instance_range.hosts())
-                prefix_len = instance_range.prefixlen
-                
-                # Setup the IP for internal network access
-                subprocess.call([
-                    "/usr/bin/sudo", 
-                    '/sbin/ip',
-                    'addr', 
-                    'add', 
-                    '{}/{}'.format(network_hosts[len(network_hosts)-1], prefix_len),
-                    'dev',
-                    self.config['bootstrap']['interface']
-                ])
             
             logger.info("Setting router external interfaces to correct switch")
             # Update external router connections
@@ -373,6 +403,17 @@ class DropshipBuilder():
             state_file.mark_done()    
         else:
             logger.warning("Router bootstrap has already been completed")
+        
+        
+        # Always update routers with VMID data from statefile
+        state_file.from_file()
+        for i in range(len(self._routers)):
             
+            state_file_data = state_file.get_system(self._routers[i].hostname)
+            self._routers[i].vmid = state_file_data[0]
+        
+        return True
+
+        
 
         

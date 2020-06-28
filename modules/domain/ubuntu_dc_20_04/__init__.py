@@ -1,8 +1,8 @@
 from dropship.lib.base_module import BaseModule
 
-class UbuntuDC(BaseModule):
+class UbuntuDC2004(BaseModule):
     __NAME__ = "ubuntu_dc_20_04"
-    __DESC__ = "Ubuntu DC Sample 4.11+"
+    __DESC__ = "Ubuntu DC 20.04"
     __IMAGE__ = "server.linux.ubuntu_2004"
     __VARS__ = [""]
     __ROLE__ = "domain"
@@ -13,4 +13,4 @@ class UbuntuDC(BaseModule):
     __BECOME_USER__ = "root"
 
 
-__MODULE__ = UbuntuDC
+__MODULE__ = UbuntuDC2004

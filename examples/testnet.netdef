@@ -1,10 +1,13 @@
 NETWORK testnet
 RANGE 192.168.x.0/24
 DOMAIN "HACKNET.fake" "Administrator" "2h@cktheNet!"
-HOST testdc domain.ubuntu_dc_20_04 192.168.x.2
-HOST test_client1 clients.windows10_1909 dhcp
-HOST test_dhcp services.ubuntu_dhcp 192.168.x.3
+HOST testdc domain.ubuntu_dc_18_04 192.168.x.2
+HOST test-client1 clients.windows10_1909 dhcp
+HOST test-dhcp services.ubuntu_dhcp 192.168.x.3
 VAR dhcp_range_start ...
 VAR dhcp_range_end ...
+USER ttest "2Us3theNet!" Tommy Test 
+USER eexample "2Us3theNet!" Edward Example 
 
-POSTMOD testdc post.vuln1 var1=sadfadsf 
+POSTMOD test-client1 post.windows.config.localadmin username=HACKNET\\ttest
+POSTMOD test-client1 post.windows.config.rsat

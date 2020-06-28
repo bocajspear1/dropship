@@ -5,6 +5,8 @@ import re
 from dropship.lib.helpers import ModuleManager
 from dropship.lib.netinst import NetworkInstance
 from dropship.lib.host import Host, Router
+from dropship.lib.user import User
+from dropship.lib.postmod import PostModule
 
 logger = logging.getLogger('dropship')
 
@@ -20,6 +22,9 @@ class NetworkDefinition():
         self._dhcp_seen = False
         self._domain = None
         self._hosts = []
+        self._users = []
+        self._postmods = []
+
         if module_path is None:
             self.mm = ModuleManager("./out")
         else:
@@ -51,12 +56,29 @@ class NetworkDefinition():
                     logger.error("Invalid DOMAIN line: '{}'".format(line))
                     return False
                 self._domain = (line_split[1], line_split[2], line_split[3])
+            elif line_split[0] == "USER":
+                if len(line_split) != 5:
+                    logger.error("Invalid USER line: '{}'".format(line))
+                    return False
+                self._users.append((line_split[1], line_split[2], line_split[3], line_split[4]))
             elif line_split[0] == "VAR":
                 if len(line_split) != 3:
                     logger.error("Invalid VAR line: '{}'".format(line))
                     return False
                 
                 self.vars[line_split[1].lower()] = line_split[2]
+            elif line_split[0] == "POSTMOD":
+                if len(line_split) < 3:
+                    logger.error("Invalid POSTMOD line: '{}'".format(line))
+                    return False
+                
+                
+                hostname = line_split[1]
+                mod_name = line_split[2]
+                mod_vars = line_split[3:]
+
+                self._postmods.append((hostname, mod_name, mod_vars))
+                
             elif line_split[0] == "HOST":
                 if len(line_split) != 4:
                     logger.error("Invalid HOST line: '{}'".format(line))
@@ -158,7 +180,11 @@ class NetworkDefinition():
 
 
                 routers.append(router)
-
+            elif line_split[0] == "SWITCH":
+                if len(line_split) != 2:
+                    logger.error("Invalid SWITCH line: '{}'".format(line))
+                    return None
+                inst_switch = line_split[1]
             elif line_split[0] == "SWITCH":
                 if len(line_split) != 2:
                     logger.error("Invalid SWITCH line: '{}'".format(line))
@@ -212,6 +238,7 @@ class NetworkDefinition():
             for host in self._hosts:
                 if host.role == "domain":
                     netinst.set_var("network_dns_server", host.ip_addr)
+                    netinst.set_var("network_domain_controller", host.ip_addr)
 
         if self._domain is not None:
             netinst.set_var("domain_long", self._domain[0])
@@ -220,10 +247,50 @@ class NetworkDefinition():
             netinst.set_var("domain_admin_username", self._domain[1])
 
         for def_var in self.vars:
+            for octet in octets:
+                self.vars[def_var] = self._check_for_octet(self.vars[def_var], octet, octets[octet])
             netinst.set_var(def_var, self.vars[def_var])
 
         for inst_var in inst_vars:
             netinst.set_var(inst_var, inst_vars[inst_var])
+
+        for user_data in self._users:
+            user_obj = User(user_data[0], user_data[1], user_data[2], user_data[3])
+            netinst.add_user(user_obj)
+
+        for postmod in self._postmods:
+            
+            hostname = postmod[0]
+            mod_name = postmod[1]
+            mod_vars = postmod[2]
+
+            print(hostname, mod_name)
+
+            mod_obj = self.mm.get_module(mod_name)
+            if mod_obj.__ROLE__ != "post":
+                logger.error("Module '{}' is not role 'post'".format(mod_name))
+                return None
+
+            postmod_inst = PostModule(hostname, mod_name)
+
+            for var_group in mod_vars:
+                if "=" not in iface:
+                    logger.error("Invalid POSTMOD line: '{}', invalid variable definition".format(line))
+                    return None
+                var_split = var_group.split("=")
+                var_name = var_split[0]
+                var_val = var_split[1]
+                for octet in octets:
+                    var_val = self._check_for_octet(var_val, octet, octets[octet])
+                print(var_name, var_val)
+                postmod_inst.vars[var_name] = var_val
+
+            for check_var in mod_obj.__VARS__:
+                if check_var not in postmod_inst.vars:
+                    logger.error("Variable '{}' not set for module {}".format(check_var, mod_name))
+                    return None
+
+            netinst.add_postmod(postmod_inst)
 
         is_ok = netinst.var_check()
         if not is_ok:

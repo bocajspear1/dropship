@@ -1,0 +1,54 @@
+- name: Wait for server to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+- name: Write the host key to known hosts
+  delegate_to: localhost
+  shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
+  become: no
+- name: Set up /etc/hosts file
+  shell: echo "{{ ansible_host }} {{ inventory_hostname }} {{ inventory_hostname }}.{{ hostvars[inventory_hostname]['domain_long']|lower }}" >> /etc/hosts
+- name: Stop Samba services
+  shell: systemctl stop samba-ad-dc.service smbd.service nmbd.service winbind.service
+- name: Disable Samba services
+  shell: systemctl disable samba-ad-dc.service smbd.service nmbd.service winbind.service
+- name: Remove old Samba config file
+  file: 
+    path: /etc/samba/smb.conf 
+    state: absent
+- name: Remove Kerberos config file
+  file: 
+    path: /etc/krb5.conf
+    state: absent
+- name: Provision the domain
+  shell: samba-tool domain provision --server-role=dc --use-rfc2307 --dns-backend=SAMBA_INTERNAL --realm={{ domain_long|upper }} --domain={{ domain_short }} --adminpass="{{ domain_admin_password }}"
+- name: Copy the new Kerberos file in
+  shell: cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
+- name: Unmask Samba AD DC service
+  systemd:
+    name: samba-ad-dc
+    enabled: yes
+    masked: no
+- name: Start Samba AD DC service
+  systemd:
+    state: started
+    name: samba-ad-dc
+- name: Disable systemd-resolved
+  shell: systemctl stop systemd-resolved && systemctl disable systemd-resolved
+- name: Unlink /etc/resolv.conf
+  file: 
+    path: unlink /etc/resolv.conf
+    state: absent
+- name: Create new /etc/resolv.conf
+  shell: echo -e "nameserver {{ network_dns_server }}\nsearch {{ domain_long|lower }}\n"  > /etc/resolv.conf  
+- name: Add DNS forwarder to Samba DNS
+  shell: echo "dns forwarder = {{ network_dns_forwarder }}" >> /etc/samba/smb.conf
+- name: Restart Samba AD DC service
+  systemd:
+    state: reloaded
+    name: samba-ad-dc
+- name: Add Users
+  loop: "{{ network_users }}"
+  shell: "samba-tool user create '{{ item.username }}' '{{ item.password }}' --surname='{{ item.last }}' --given-name='{{ item.first }}'"

@@ -23,13 +23,9 @@ class ModuleManager():
         if module_name in self._module_cache:
             return self._module_cache[module_name]
 
-        module_split = module_name.split(".")
-        category = module_split[0]
-        name = module_split[1]
-
         start = self._module_path.replace("./", "").replace("/", ".")
 
-        temp = importlib.import_module(start + "." + category + "." + name)
+        temp = importlib.import_module(start + "." + module_name)
 
         module = temp.__MODULE__()
 
@@ -163,6 +159,11 @@ class StateFile():
             if mac != "":
                 mac_list.append(mac)
         return mac_list
+    
+    def from_host_list(self, host_list):
+        for host in host_list:
+            self.add_full_entry(host.hostname, host.vmid, host.mac, host.connect_ip)
+
 
 # Stores inventory information that is put into an Ansible inventory file
 class DropshipInventory():
@@ -233,6 +234,50 @@ class DropshipInventory():
         out_file.write(inv_data_out)
         out_file.close()
 
+    def from_postmod_list(self, mm, cred_map, postmod_list, host_map):
+        for module_data in postmod_list:
+            postmod = mm.get_module(module_data.module_name)
+            postmod_group = postmod.__NAME_NORMALIZED__
+
+            if not self.has_group(postmod_group):
+                username = None
+                password = None
+                if postmod.__IMAGE__ in cred_map:
+                    cred_split = cred_map[postmod.__IMAGE__].split(":")
+                    username = cred_split[0]
+                    password = cred_split[1]
+                else:
+                    logger.error("Could not find credentials for image '{}'".format(postmod.__IMAGE__))
+                    return False
+                self.add_group(
+                    postmod_group, 
+                    postmod.__OSTYPE__, 
+                    postmod.__METHOD__,
+                    username,
+                    password
+                )
+                self.set_group_metadata(postmod_group, 'post_path', postmod.get_post_path(mm.out_path))
+
+                if hasattr(postmod, '__BECOME_USER__'):
+                    if postmod.__IMAGE__ != "DOMAIN":
+                        self.add_group_var(postmod_group, 'ansible_become_user', postmod.__BECOME_USER__)
+                    else:
+                        self.add_group_var(postmod_group, 'ansible_become_user', username)
+                    self.add_group_var(postmod_group, 'ansible_become_method', postmod.__BECOME_METHOD__)
+                    self.add_group_var(postmod_group, 'ansible_become_pass', password)
+                    self.add_group_var(postmod_group, 'ansible_become', 'yes')
+                
+                if postmod.__OSTYPE__ == "windows":
+                    self.add_group_var(postmod_group, 'ansible_winrm_server_cert_validation', 'ignore')
+            
+            host_data = host_map[module_data.hostname]
+
+            new_vars = {}
+            for var_name in module_data.vars:
+                new_vars["var_" + var_name] = module_data.vars[var_name]
+
+            self.add_host(postmod_group, host_data.hostname, host_data.connect_ip, vars=new_vars)
+
     def from_host_list(self, mm, cred_map, host_list, name_prefix=""):
         for host in host_list:
             host_mod = mm.get_module(host.module_name)
@@ -258,6 +303,16 @@ class DropshipInventory():
                 self.set_group_metadata(host_mod_group, 'bootstrap_path', host_mod.get_bootstrap_path(mm.out_path))
                 self.set_group_metadata(host_mod_group, 'reboot_path', host_mod.get_reboot_path(mm.out_path))
                 self.set_group_metadata(host_mod_group, 'deploy_path', host_mod.get_deploy_path(mm.out_path))
+               
+
+                if hasattr(host_mod, '__BECOME_USER__'):
+                    self.add_group_var(host_mod_group, 'ansible_become_user', host_mod.__BECOME_USER__)
+                    self.add_group_var(host_mod_group, 'ansible_become_method', host_mod.__BECOME_METHOD__)
+                    self.add_group_var(host_mod_group, 'ansible_become_pass', password)
+                    self.add_group_var(host_mod_group, 'ansible_become', 'yes')
+                
+                if host_mod.__OSTYPE__ == "windows":
+                    self.add_group_var(host_mod_group, 'ansible_winrm_server_cert_validation', 'ignore')
             
             self.add_host(host_mod_group, "{}{}".format(name_prefix, host.hostname), host.connect_ip, vars=host.vars)
             

@@ -3,7 +3,7 @@ network:
         eth0:
             dhcp4: no
             dhcp6: no
-            addresses: [{{ new_ip }}/{{ new_prefix }}, ]
+            addresses: [{{ new_ip }}/{{ network_prefix }}, ]
             gateway4:  {{ network_gateway }}
             nameservers:
-                    addresses: [{{ network_int_dns }}]
+                    addresses: [{{ network_dns_server }}]

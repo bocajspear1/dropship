@@ -23,7 +23,7 @@
     path: /etc/krb5.conf
     state: absent
 - name: Provision the domain
-  shell: samba-tool domain provision --server-role=dc --use-rfc2307 --dns-backend=SAMBA_INTERNAL --realm={{ hostvars[inventory_hostname]['domain_long']|upper }} --domain={{ hostvars[inventory_hostname]['domain_short'] }} --adminpass="{{ hostvars[inventory_hostname]['domain_admin_pass'] }}"
+  shell: samba-tool domain provision --server-role=dc --use-rfc2307 --dns-backend=SAMBA_INTERNAL --realm={{ domain_long|upper }} --domain={{ domain_short }} --adminpass="{{ domain_admin_password }}"
 - name: Copy the new Kerberos file in
   shell: cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
 - name: Unmask Samba AD DC service
@@ -38,15 +38,17 @@
 - name: Disable systemd-resolved
   shell: systemctl stop systemd-resolved && systemctl disable systemd-resolved
 - name: Unlink /etc/resolv.conf
-  shell: unlink /etc/resolv.conf
+  file: 
+    path: unlink /etc/resolv.conf
+    state: absent
 - name: Create new /etc/resolv.conf
-  shell: echo -e "nameserver {{ hostvars[inventory_hostname]['network_int_dns'] }}\nsearch {{ hostvars[inventory_hostname]['domain_long']|lower }}\n"  > /etc/resolv.conf  
+  shell: echo -e "nameserver {{ network_dns_server }}\nsearch {{ domain_long|lower }}\n"  > /etc/resolv.conf  
 - name: Add DNS forwarder to Samba DNS
-  shell: echo "dns forwarder = hostvars[inventory_hostname]['network_ext_dns']" >> /etc/samba/smb.conf
+  shell: echo "dns forwarder = {{ network_dns_forwarder }}" >> /etc/samba/smb.conf
 - name: Restart Samba AD DC service
   systemd:
     state: reloaded
     name: samba-ad-dc
 - name: Add Users
   loop: "{{ network_users }}"
-  shell: samba-tool user create {{ item.username }} '{{ item.password }}' --surname="{{ item.lastname }}"" --given-name="{{ item.firstname }}"
+  shell: "samba-tool user create '{{ item.username }}' '{{ item.password }}' --surname='{{ item.last }}' --given-name='{{ item.first }}'"

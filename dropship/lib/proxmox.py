@@ -24,6 +24,9 @@ class NodeObj():
         if not linked:
             full = 1
 
+        # Proxmox doesn't like _ in the name
+        new_name = new_name.replace("_", "-")
+
         args = {
             "name": new_name,
             "full": full,
@@ -303,13 +306,13 @@ class ProxmoxProvider():
     def snapshot_vm(self, vmid, snapname):
         return self._node.snapshot_vm(vmid, snapname)
 
-    def clone_vm(self, template, new_name):
-        if template not in self._vm_map:
-            raise ValueError("Invalid template")
+    def clone_vm(self, image_name, new_name):
+        if image_name not in self._vm_map:
+            raise ValueError("Invalid image name '{}'".format(image_name))
 
-        error, vmid = self._node.clone_vm(self._vm_map[template], new_name, linked=True)
+        error, vmid = self._node.clone_vm(self._vm_map[image_name], new_name, linked=True)
         if error is None:
-            logger.info("Creating clone of template {} named {} ({})".format(template, new_name, vmid))
+            logger.info("Creating clone of image {} named {} ({})".format(image_name, new_name, vmid))
             return vmid 
         else:
             logger.error("Clone failed!")

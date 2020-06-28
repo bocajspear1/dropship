@@ -9,8 +9,8 @@
   win_hostname: 
     name: "{{ inventory_hostname }}"
 - name: Set IP, unless set to DHCP
-  win_command: schtasks /Create /TN "Bootstrap Set IP" /TR "C:\Windows\System32\netsh.exe interface ip set address \"Ethernet\" static {{ hostvars[inventory_hostname]['new_ip'] }} {{ hostvars[inventory_hostname]['new_mask'] }} {{ hostvars[inventory_hostname]['network_gateway'] }} 1" /RU SYSTEM /RL HIGHEST /SC ONSTART /z /V1
+  win_command: schtasks /Create /TN "Bootstrap Set IP" /TR "C:\Windows\System32\netsh.exe interface ip set address \"Ethernet\" static {{ hostvars[inventory_hostname]['new_ip'] }} {{ network_prefix }} {{ network_gateway }} 1" /RU SYSTEM /RL HIGHEST /SC ONSTART /z /V1
   when: "hostvars[inventory_hostname]['new_ip'] != 'dhcp'"
 - name: Set DNS, unless set to DHCP
-  win_command: schtasks /Create /TN "Bootstrap Set DNS" /TR "C:\Windows\System32\netsh.exe interface ip set dns \"Ethernet\" static {{ hostvars[inventory_hostname]['network_int_dns'] }} " /RU SYSTEM /RL HIGHEST /SC ONSTART /z /V1
+  win_command: schtasks /Create /TN "Bootstrap Set DNS" /TR "C:\Windows\System32\netsh.exe interface ip set dns \"Ethernet\" static {{ network_dns_server }} " /RU SYSTEM /RL HIGHEST /SC ONSTART /z /V1
   when: "hostvars[inventory_hostname]['new_ip'] != 'dhcp'"
