@@ -65,4 +65,4 @@ Dropship only has a few global rules to templates, the rest will depend on the m
 
 These global rules are:
 * An Image should always utilize DHCP to get their initial address. 
-* An Image should have unqice identifiers removed to ensure cloned systems are different per clone (think sysprep for Windows)
+* An Image should have unique identifiers removed to ensure cloned systems are different per clone (think sysprep for Windows)

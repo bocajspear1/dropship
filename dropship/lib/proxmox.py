@@ -33,7 +33,6 @@ class NodeObj():
             "newid": nextid,
             # For bug: https://bugzilla.proxmox.com/show_bug.cgi?id=2578
             "target": "localhost"
-
         }
 
         error, data = self._base.auth_post("{}/qemu/{}/clone".format(self._node_path(), vmid), args)
@@ -137,7 +136,7 @@ class NodeObj():
 
 
 class Proxmox():
-    def __init__(self, server_url, verify_ssl=False):
+    def __init__(self, server_url, verify_ssl=False, offset=0):
         if server_url.endswith("/"):
             self._url = server_url[:-1]
         else:
@@ -148,6 +147,7 @@ class Proxmox():
             logger.warning("Ignoring SSL certificate errors")
         self._csrf = ""
         self._token = ""
+        self._offset = offset
 
 
     def auth_post(self, path, data):
@@ -171,8 +171,10 @@ class Proxmox():
         if status == 200:
             return None, resp.json()['data']
         else:
-            # print(resp.json())
-            return resp.json()['errors'], None
+            if 'errors' in resp.json():
+                return resp.json()['errors'], None
+            else:
+                return resp.text, None
 
     def auth_get(self, path):
 
@@ -196,7 +198,7 @@ class Proxmox():
             if 'errors' in resp.json():
                 return resp.json()['errors'], None
             else:
-                return "An unspecified error occured", None
+                return resp.text, None
 
     def auth_delete(self, path):
 
@@ -220,7 +222,7 @@ class Proxmox():
             if 'errors' in resp.json():
                 return resp.json()['errors'], None
             else:
-                return "An unspecified error occured", None
+                return resp.text, None
 
     def has_cache(self):
         return os.path.exists(".pve")
@@ -280,7 +282,10 @@ class ProxmoxProvider():
         # super().__init__(config)
         self._config = config
         self._vm_map = vm_map
-        self._proxmox = Proxmox(self._config['host'], verify_ssl=self._config['verify_ssl'])
+        if "offset" in self._config:
+            self._proxmox = Proxmox(self._config['host'], verify_ssl=self._config['verify_ssl'], offset=int(self._config['offset']))
+        else:
+            self._proxmox = Proxmox(self._config['host'], verify_ssl=self._config['verify_ssl'])
         self._node = None
 
     def has_cache(self):
@@ -297,7 +302,7 @@ class ProxmoxProvider():
 
     def create_switch(self, switch_name):
         # For any other provider, this would create a switch.
-        # Sicne Proxmox is silly and doesn't let us do that, this function does nothing
+        # Since Proxmox is silly and doesn't let us do that, this function does nothing
         return True
 
     def has_template(self, template_name):

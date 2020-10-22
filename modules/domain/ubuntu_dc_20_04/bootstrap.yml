@@ -23,6 +23,7 @@
     - winbind 
     - libpam-winbind 
     - libnss-winbind
+    - ntp
     update_cache: yes
 - name: Set server hostname
   shell: "hostnamectl set-hostname {{ inventory_hostname }}"
