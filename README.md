@@ -1,6 +1,4 @@
-# Dropship (WORK IN PROGRESS!!!!!)
-
-> This isn't anywhere done yet
+# Dropship 
 
 Dropship is a Python-based framework to deploy and configure networks without tedious manual configurations of each system. Dropship uses the Ansible framework to address and configure the virtual machine images.
 

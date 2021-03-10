@@ -2,6 +2,8 @@
 __pycache__
 config.json
 Makefile
+!docs/Makefile
+docs/build
 test.py
 venv/
 .vscode/
