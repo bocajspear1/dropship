@@ -15,6 +15,7 @@ Creating Images
 Dropship only has a few global rules to templates, the rest will depend on the modules you plan to use with the image. You'll need to refer to documentation for those modules to build a correct image.
 
 These global rules are:
+
 * An Image should always utilize DHCP to get their initial address. Ensure this DHCP will be unique, since multiple instances of the cloned image will be running during a bootstrap. (For example, recent versions of Ubuntu have moved to using the system ID instead of a MAC for identification during DHCP. Switch Ubuntu images back to using the MAC for more consistent results.) 
 * An Image should have unique identifiers removed to ensure cloned systems are different per clone (think sysprep for Windows). Ensure things like machine IDs and SSH host keys are removed or regenerated when cloned.
 

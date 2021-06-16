@@ -5,11 +5,14 @@ Welcome to Dropship's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   getting-started
    dropship-basics
    commander-vm
    modules
    definitions-and-instances
    images
+   operating-dropship
+   examples
 
 
 
