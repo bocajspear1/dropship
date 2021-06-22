@@ -9,4 +9,5 @@ Here's you'll find some examples for create templates, modules, and more.
     :maxdepth: 1
     :caption: Examples:
 
-    examples/template-ubuntu
+    examples/template-linux
+    examples/template-windows

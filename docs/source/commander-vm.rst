@@ -12,16 +12,18 @@ To use Ansible and configure systems, Dropship needs temporary access to each of
 Building a Commander VM
 ========================
 
-This VM has a few requirements, but can be almost any Linux distro you want. The Alpine linux distro is recommended, as it is small and lightweight. 
+This VM has a few requirements, but can be almost any Linux distro you want. You'll probably want a Linux distro with a GUI to make modifying modules and other Dropship files easier.  
 
 * Distro supports the following:
 
-  *  Python 3
-  * ``dnsmasq``
+    *  Python 3
+    * ``dnsmasq``
   
 * Has multiple interfaces:
-  * One interface connected to a network that can connect to the virtualization environment API, probably your production network. This means this will also where you SSH to the commander VM.
-  * One interface that connects to the different networks during operation.
+
+    * One interface connected to a network that can connect to the virtualization environment API, probably your production network. 
+    * One interface that connects to the different networks during operation.
+
 * Has routing enabled 
 
 Virtualization Platform Requirements

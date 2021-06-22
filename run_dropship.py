@@ -4,6 +4,8 @@ import logging
 import sys
 import os
 import getpass
+import json
+from colorama import Fore, Back, Style
 
 import dropship
 from dropship.lib.netdef import NetworkDefinition
@@ -54,24 +56,50 @@ def main():
     parser.add_argument('--inst', help='Network instance(s) file')
     parser.add_argument('--list', help='List modules')
     parser.add_argument('--config', help='Path to configuration file')
+    parser.add_argument('--check', action='store_true', help='Runs a check for unmapped VM names')
 
     args = parser.parse_args()
 
-    if (args.defi is not None and args.inst is None) or (args.defi is None and args.inst is not None):
+    config_path = "./config.json"
+
+    if args.config:
+        config_path = args.config 
+
+    if not os.path.exists(config_path):
+        print(f"Path to config {config_path} not found")
+        sys.exit(1)
+
+    if args.check:
+        mm = ModuleManager("./out")
+
+        config_data = json.loads(open(config_path, "r").read())
+
+        module_list = mm.list_modules()
+        print(f"{'Module':40} {'Image':40}{'Image':10}{'Creds':10}")
+        print("-" * 110)
+        for module in module_list:
+            mod_obj = mm.get_module(module)
+            mod_obj_image = mod_obj.__IMAGE__
+            out_str = f"{module:40} {mod_obj_image:40}"
+            if mod_obj_image not in config_data["vm_map"]:
+                out_str += Fore.RED + f"{'NOT FOUND':10}" + Style.RESET_ALL
+            else:
+                out_str += Fore.GREEN + f"{'FOUND':10}" + Style.RESET_ALL
+            if mod_obj_image not in config_data["credentials"]:
+                out_str += Fore.RED + f"{'NOT FOUND':10}" + Style.RESET_ALL
+            else:
+                out_str += Fore.GREEN + f"{'FOUND':10}" + Style.RESET_ALL
+            
+            print(out_str)
+            
+
+    elif (args.defi is not None and args.inst is None) or (args.defi is None and args.inst is not None):
         logger.error('--defi or --inst not set')
         sys.exit(1)
     elif args.defi is not None and args.inst is not None:
         logger.info('Starting a Dropship run...')
         def_map = {}
         inst_map = {}
-
-        config_path = "./config.json"
-        if args.config is not None:
-            config_path = args.config
-
-        if not os.path.exists(config_path):
-            logger.error("Path to config file '{}' not found".format(config_path))
-            sys.exit(1)
         
         builder = DropshipBuilder(config_path)
 

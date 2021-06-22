@@ -17,7 +17,36 @@ class ModuleManager():
     def __init__(self, out_path, module_path="./modules"):
         self._module_cache = {}
         self._module_path = module_path
-        self.out_path =out_path
+        self.out_path = out_path
+
+    def _is_module(self, path):
+        contents = os.listdir(path)
+        if "bootstrap.yml" in contents or "deploy.yml" in contents or "post.yml" in contents:
+            if "__init__.py" in contents:
+                return True
+
+        return False
+
+    def _get_module_list(self, path, parent=""):
+        
+        parent_full = os.path.join(parent, path)
+        dir_list = os.listdir(parent_full)
+        mod_list = []
+
+        for item in dir_list:
+            full_path = os.path.join(parent, path, item)
+            if os.path.isdir(full_path):
+                if self._is_module(full_path):
+                    mod_name = full_path.replace(self._module_path + "/", "")
+                    mod_list.append(mod_name.replace("/", ".").replace("..", "."))
+                else:
+                    mod_list += self._get_module_list(full_path)
+        
+        return mod_list
+
+    def list_modules(self):
+        return self._get_module_list(self._module_path)
+        
 
     def get_module(self, module_name):
         if module_name in self._module_cache:

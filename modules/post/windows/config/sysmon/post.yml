@@ -1,0 +1,37 @@
+- name: Wait for client to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 5986
+    timeout: 600
+- name: Wait for domain controller to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ network_domain_controller }}"
+    port: 445
+    timeout: 600
+- name: Create output dir
+  win_file:
+    path: C:\sysmon\
+    state: directory
+- name: Transfer Sysmon zip
+  win_copy:
+    dest: C:\sysmon\Sysmon.zip
+    src: +FILES+/Sysmon.zip
+  vars:
+    ansible_command_timeout: 120
+- name: Transfer Sysmon config
+  win_copy:
+    dest: C:\sysmon\sysmonconfig.xml
+    src: +FILES+/sysmonconfig.xml
+- name: Unzip sysmon
+  win_command: powershell.exe -Command "Expand-Archive -Force C:\sysmon\Sysmon.zip C:\sysmon"
+- name: Install Sysmon
+  vars:
+    ansible_command_timeout: 1200
+    ansible_winrm_operation_timeout_sec: 1200
+    ansible_winrm_read_timeout_sec: 1800   
+  win_command: C:\sysmon\sysmon64.exe -i C:\sysmon\sysmonconfig.xml -accepteula
+  

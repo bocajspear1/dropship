@@ -19,6 +19,8 @@ These global rules are:
 * An Image should always utilize DHCP to get their initial address. Ensure this DHCP will be unique, since multiple instances of the cloned image will be running during a bootstrap. (For example, recent versions of Ubuntu have moved to using the system ID instead of a MAC for identification during DHCP. Switch Ubuntu images back to using the MAC for more consistent results.) 
 * An Image should have unique identifiers removed to ensure cloned systems are different per clone (think sysprep for Windows). Ensure things like machine IDs and SSH host keys are removed or regenerated when cloned.
 
+Examples are available for building images at :ref:`examples`.
+
 Using Images
 ============
 
