@@ -1,4 +1,0 @@
-- name: Reboot system
-  win_command: 'shutdown /r'
-  poll: 0
-  async: 1

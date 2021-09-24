@@ -23,9 +23,9 @@
 - name: Configure update package (Takes a long time...)
   win_command: cmd.exe /c "wusa.exe C:\rsat.msu /quiet /norestart" 
   vars:
-    ansible_command_timeout: 120
+    ansible_command_timeout: 1200
     ansible_winrm_operation_timeout_sec: 1200
-    ansible_winrm_read_timeout_sec: 1800
+    ansible_winrm_read_timeout_sec: 1800  
 - name: Reboot system
   shell: 'sleep 2 && shutdown -r now'
   poll: 0

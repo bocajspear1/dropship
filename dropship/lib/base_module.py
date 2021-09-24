@@ -25,8 +25,8 @@ class BaseModule():
     def get_bootstrap_path(self, out_dir):
         return self.get_module_path(out_dir) + "/bootstrap.yml"
 
-    def get_reboot_path(self, out_dir):
-        return self.get_module_path(out_dir) + "/reboot.yml"
+    def get_shutdown_path(self, out_dir):
+        return self.get_module_path(out_dir) + "/shutdown.yml"
 
     def get_deploy_path(self, out_dir):
         return self.get_module_path(out_dir) + "/deploy.yml"
@@ -53,7 +53,7 @@ class BaseModule():
         else:
             self._prepare_stage_files(mod_bootstrap_src, dest_file, self.__BOOTSTRAP_FILES__, out_dir)
 
-        self._prepare_reboot(out_dir)
+        self._prepare_shutdown(out_dir)
 
     def prepare_deploy(self, out_dir):
         module_dir = self.get_module_path(out_dir)
@@ -69,7 +69,7 @@ class BaseModule():
         else:
             self._prepare_stage_files(mod_deploy_src, dest_file, self.__DEPLOY_FILES__, out_dir)
 
-        self._prepare_reboot(out_dir)
+        self._prepare_shutdown(out_dir)
 
     def prepare_dhcp(self, out_dir):
         module_dir = self.get_module_path(out_dir)
@@ -99,12 +99,12 @@ class BaseModule():
         else:
             self._prepare_stage_files(mod_post_src, dest_file, self.__POST_FILES__, out_dir)
 
-    def _prepare_reboot(self, out_dir):
-        # Get the module's reboot.yml file
-        mod_reboot_src = self.get_dir() + "/reboot.yml"
-        mod_reboot_dst = self.get_reboot_path(out_dir)
-        # Copy the reboot file to our working directory
-        shutil.copyfile(mod_reboot_src, mod_reboot_dst)
+    def _prepare_shutdown(self, out_dir):
+        # Get the module's shutdown.yml file
+        mod_shutdown_src = self.get_dir() + "/shutdown.yml"
+        mod_shutdown_dst = self.get_shutdown_path(out_dir)
+        # Copy the shutdown file to our working directory
+        shutil.copyfile(mod_shutdown_src, mod_shutdown_dst)
 
     def _prepare_stage_files(self, src_file, dest_file, files, out_dir):
         files_dir = self.get_module_path(out_dir) + "/files"

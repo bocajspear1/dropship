@@ -5,11 +5,13 @@ import sys
 import os
 import getpass
 import json
+import time
+import shutil
 from colorama import Fore, Back, Style
 
 import dropship
 from dropship.lib.netdef import NetworkDefinition
-from dropship.lib.helpers import ModuleManager
+from dropship.lib.helpers import ModuleManager, StateFile
 from dropship.lib.builder import DropshipBuilder
 
 logger = logging.getLogger('dropship')
@@ -57,6 +59,7 @@ def main():
     parser.add_argument('--list', help='List modules')
     parser.add_argument('--config', help='Path to configuration file')
     parser.add_argument('--check', action='store_true', help='Runs a check for unmapped VM names')
+    parser.add_argument('--destroy', action='store_true', help='Destroys the current network')
 
     args = parser.parse_args()
 
@@ -68,6 +71,17 @@ def main():
     if not os.path.exists(config_path):
         print(f"Path to config {config_path} not found")
         sys.exit(1)
+
+    builder = DropshipBuilder(config_path)
+
+    builder.init_provider()
+
+    if not builder.provider.has_cache():
+        username = input("Provider username> ")
+        password = getpass.getpass("Provider password> ")
+        builder.provider.connect(username, password)
+    else:
+        builder.provider.connect_cache()
 
     if args.check:
         mm = ModuleManager("./out")
@@ -91,7 +105,33 @@ def main():
                 out_str += Fore.GREEN + f"{'FOUND':10}" + Style.RESET_ALL
             
             print(out_str)
+    elif args.destroy:
+        print(Fore.RED +  "WARNING!!!! - This will halt and delete the following VMs:" + Style.RESET_ALL)
+        vmid_list = []
+
+        vmid_file = open("./out/vmids.list")
+        vmid_data = vmid_file.read().strip()
+        vmid_list = vmid_data.split("\n")
+                    
+        for vmid in vmid_list:
+            print(" * {}".format(vmid))
+
+        
+        
+        print(Fore.RED +  "\nVerify you want to COMPLETELY ERASE these VMs, then type 'destroy':" + Style.RESET_ALL)
+        userin = input("> ")
+        if userin == "destroy":
+            for vmid in vmid_list:
+                print(Fore.YELLOW +  f"Halting {vmid}" + Style.RESET_ALL)
+                builder.provider.halt_vm(vmid)
+                time.sleep(2)
+                print(Fore.YELLOW +  f"Removing {vmid}" + Style.RESET_ALL)
+                builder.provider.delete_vm(vmid)
             
+            shutil.rmtree("./out")
+        else:
+            print("Destroy cancelled")
+        
 
     elif (args.defi is not None and args.inst is None) or (args.defi is None and args.inst is not None):
         logger.error('--defi or --inst not set')
@@ -100,8 +140,6 @@ def main():
         logger.info('Starting a Dropship run...')
         def_map = {}
         inst_map = {}
-        
-        builder = DropshipBuilder(config_path)
 
         logger.debug("Loading network definition from '{}'".format(args.defi))
 
@@ -174,14 +212,7 @@ def main():
             inst_map[instance].describe()
             builder.add_instance(instance, inst_map[instance])
         
-        builder.init_provider()
-
-        if not builder.provider.has_cache():
-            username = input("Provider username> ")
-            password = getpass.getpass("Provider password> ")
-            builder.provider.connect(username, password)
-        else:
-            builder.provider.connect_cache()
+        
         builder.run_build()
 
     elif args.list is not None:

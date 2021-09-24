@@ -8,6 +8,14 @@
   delegate_to: localhost
   shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
   become: no
+- name: Disable systemd-resolved
+  shell: systemctl stop systemd-resolved && systemctl disable systemd-resolved
+- name: Unlink /etc/resolv.conf
+  file: 
+    path: /etc/resolv.conf
+    state: absent
+- name: Create new /etc/resolv.conf
+  shell: /bin/sh -c 'echo -e "nameserver {{ network_dns_server }}\nsearch {{ domain_long|lower }}\n"  > /etc/resolv.conf'
 - name: Configure Dnsmasq
   template:
     src: +FILES+/dnsmasq.conf

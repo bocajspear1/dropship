@@ -7,3 +7,5 @@ docs/build
 test.py
 venv/
 .vscode/
+.pve
+out/*

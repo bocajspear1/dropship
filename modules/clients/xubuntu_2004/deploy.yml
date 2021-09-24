@@ -1,0 +1,20 @@
+- name: Wait for client to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+- name: Write the host key to known hosts
+  delegate_to: localhost
+  shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
+  become: no
+- name: Set NTP settings
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/timesyncd.conf
+    regexp: '^NTP='
+    line: "NTP={{ network_domain_controller }}"
+- name: Join domain
+  shell: | 
+    echo "{{ domain_admin_password }}" | realm join {{ domain_long|lower }}
+    pam-auth-update --enable mkhomedir
+    history -c

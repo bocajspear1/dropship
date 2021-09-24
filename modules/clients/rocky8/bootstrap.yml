@@ -1,0 +1,47 @@
+- name: Wait for client to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+- name: Write the host key to known hosts
+  delegate_to: localhost
+  shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
+  become: no
+- name: Update hosts file
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127.0.1.1(.*)'
+    line: '127.0.1.1\1 {{ inventory_hostname }} {{ inventory_hostname }}.{{ domain_long|lower }}'
+    backrefs: yes
+- name: Set client hostname
+  shell: "hostnamectl set-hostname {{ inventory_hostname }}.{{ domain_long|lower }}"
+- name: Install needed packages
+  yum:
+    name:
+      - sssd 
+      - realmd 
+      - oddjob 
+      - oddjob-mkhomedir 
+      - adcli 
+      - samba-common 
+      - samba-common-tools 
+      - krb5-workstation 
+      - openldap-clients 
+      - authselect-compat
+    state: present
+- name: Set IP if DHCP is not set
+  blockinfile:
+    path: /etc/sysconfig/network-scripts/ifcfg-eth0
+    block: |
+      IPADDR={{ hostvars[inventory_hostname]['new_ip'] }}
+      NETMASK={{ network_netmask }}
+      GATEWAY={{ network_gateway }}
+      DNS1={{ network_dns_server }}
+  when: "hostvars[inventory_hostname]['new_ip'] != 'dhcp'"
+- name: Set IP if DHCP is not set (change dhcp to static)
+  ansible.builtin.lineinfile:
+    path: /etc/sysconfig/network-scripts/ifcfg-eth0
+    regexp: 'BOOTPROTO[ ]*=[ ]*dhcp'
+    line: 'BOOTPROTO=static'
+  when: "hostvars[inventory_hostname]['new_ip'] != 'dhcp'"

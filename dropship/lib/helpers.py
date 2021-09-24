@@ -150,6 +150,12 @@ class StateFile():
                 return True
         return False
 
+    def get_vmid_list(self):
+        vmid_list = []
+        for i in range(len(self.lines)):
+            vmid_list.append(self.lines[i][1])
+        return vmid_list
+
     def set_ip_by_mac(self, mac, ip_addr):
         for i in range(len(self.lines)):
             if self.lines[i][2].lower() == mac.lower():
@@ -248,7 +254,8 @@ class DropshipInventory():
                 "vars": self._vars,
                 "hosts": {
                     "localhost": {
-                        "ansible_become": 'no'
+                        "ansible_become": 'no',
+                        "ansible_connection": "local"
                     }
                 }
             },
@@ -330,7 +337,7 @@ class DropshipInventory():
                     password
                 )
                 self.set_group_metadata(host_mod_group, 'bootstrap_path', host_mod.get_bootstrap_path(mm.out_path))
-                self.set_group_metadata(host_mod_group, 'reboot_path', host_mod.get_reboot_path(mm.out_path))
+                self.set_group_metadata(host_mod_group, 'shutdown_path', host_mod.get_shutdown_path(mm.out_path))
                 self.set_group_metadata(host_mod_group, 'deploy_path', host_mod.get_deploy_path(mm.out_path))
                
 

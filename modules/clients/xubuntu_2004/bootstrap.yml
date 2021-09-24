@@ -1,0 +1,26 @@
+- name: Wait for client to come online
+  become: no
+  delegate_to: localhost
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+- name: Write the host key to known hosts
+  delegate_to: localhost
+  shell: "ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts"
+  become: no
+- name: Update hosts file
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127.0.1.1(.*)'
+    line: '127.0.1.1\1 {{ inventory_hostname }} {{ inventory_hostname }}.{{ domain_long|lower }}'
+    backrefs: yes
+- name: Set client hostname
+  shell: "hostnamectl set-hostname {{ inventory_hostname }}.{{ domain_long|lower }}"
+- name: Set IP is DHCP is not set
+  shell: |
+    nmcli con mod eth0 ipv4.addresses {{ hostvars[inventory_hostname]['new_ip'] }}/{{ network_prefix }}
+    nmcli con mod eth0 ipv4.gateway {{ network_gateway }} 
+    nmcli con mod eth0 ipv4.dns "{{ network_dns_server }}"
+    nmcli con mod eth0 ipv4.method manual
+  when: "hostvars[inventory_hostname]['new_ip'] != 'dhcp'"
+    

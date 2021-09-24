@@ -30,6 +30,9 @@
   file:
     path: /etc/netplan/50-cloud-init.yaml
     state: absent
-  
+- name: Remove installer init netplan file
+  file:
+    path: /etc/netplan/00-installer-config.yaml
+    state: absent  
     
     

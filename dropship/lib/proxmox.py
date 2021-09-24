@@ -8,10 +8,11 @@ import stat
 logger = logging.getLogger('dropship')
 
 class NodeObj():
-    def __init__(self, base, node_id):
+    def __init__(self, base, node_id, pool):
         self._base = base
         self.node_id = node_id
         self.tasks = []
+        self.pool = pool
 
     def _node_path(self):
         return "/nodes/{}".format(self.node_id)
@@ -31,8 +32,10 @@ class NodeObj():
             "name": new_name,
             "full": full,
             "newid": nextid,
+            "pool": self.pool,
             # For bug: https://bugzilla.proxmox.com/show_bug.cgi?id=2578
-            "target": "localhost"
+            # "target": "localhost"
+            "target": self.node_id
         }
 
         error, data = self._base.auth_post("{}/qemu/{}/clone".format(self._node_path(), vmid), args)
@@ -93,8 +96,29 @@ class NodeObj():
             
         return status, return_data
 
+    def wait_until_shutdown(self, vmid):
+        for i in range(5):
+
+            status, data = self._base.auth_get("{}/qemu/{}/status/current".format(self._node_path(), vmid))
+            if data['status'] == 'stopped':
+                return True 
+            elif data['status'] == 'running':
+                pass
+            else:
+                logger.warning("Invalid response for status?")
+            time.sleep(30)
+        return False
+
     def start_vm(self, vmid):
         status, data = self._base.auth_post("{}/qemu/{}/status/start".format(self._node_path(), vmid), {})
+        return status, data
+
+    def delete_vm(self, vmid):
+        status, data = self._base.auth_delete("{}/qemu/{}".format(self._node_path(), vmid))
+        return status, data
+
+    def halt_vm(self, vmid):
+        status, data = self._base.auth_post("{}/qemu/{}/status/stop".format(self._node_path(), vmid), {})
         return status, data
 
     def get_status(self):
@@ -259,8 +283,8 @@ class Proxmox():
             logger.error("Proxmox authentication failed")
             return False
 
-    def Node(self, node_id):
-        node = NodeObj(self, node_id)
+    def Node(self, node_id, pool):
+        node = NodeObj(self, node_id, pool)
         error, data = node.get_status()
         if error is not None:
             logger.error(error)
@@ -293,12 +317,12 @@ class ProxmoxProvider():
 
     def connect_cache(self):
         self._proxmox.load_cache()
-        self._node = self._proxmox.Node(self._config['node'])
+        self._node = self._proxmox.Node(self._config['node'], self._config['pool'])
 
     def connect(self, username, password):
         logger.info("Connecting to {}, using node '{}'".format(self._config['host'], self._config['node']))
         self._proxmox.connect(username, password)
-        self._node = self._proxmox.Node(self._config['node'])
+        self._node = self._proxmox.Node(self._config['node'], self._config['pool'])
 
     def create_switch(self, switch_name):
         # For any other provider, this would create a switch.
@@ -324,8 +348,17 @@ class ProxmoxProvider():
             logger.error(error)
             return 0
 
+    def wait_until_shutdown(self, vmid):
+        return self._node.wait_until_shutdown(vmid)
+
     def start_vm(self, vmid):
         return self._node.start_vm(vmid)
+
+    def halt_vm(self, vmid):
+        return self._node.halt_vm(vmid)
+
+    def delete_vm(self, vmid):
+        return self._node.delete_vm(vmid)
 
     def set_interface(self, vmid, interface_num, new_switch):
         

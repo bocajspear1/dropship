@@ -1,5 +1,5 @@
 - name: Reboot the router
   vyos_command:
     commands:
-      - command: 'sudo reboot'
+      - command: 'sudo poweroff'
 

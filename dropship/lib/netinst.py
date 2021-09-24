@@ -118,6 +118,7 @@ class NetworkInstance():
         state_file = StateFile(self._bootstrap_dir + "/bootstrap_" + filename + ".state")
 
         if not state_file.exists():
+            
             logger.info("Cloning systems...")
             for i in range(len(host_list)):
                 host = host_list[i]
@@ -133,6 +134,7 @@ class NetworkInstance():
                     return False
                 host_list[i].vmid = vmid
                 state_file.set_vmid(hostname, vmid)
+                builder.add_vmid(vmid)
 
             # Wait for clones
             logger.info("Waiting for clones to complete...")
@@ -162,7 +164,6 @@ class NetworkInstance():
 
             # Write a state file
             state_file.to_file()
-            
         else:
             logger.info("Using existing {} state file".format(filename))
 
@@ -212,8 +213,8 @@ class NetworkInstance():
             bootstrap_playbook.add_task(
                 group_name,
                 {
-                    "include_tasks": os.path.abspath(inventory.get_group_metadata(group_name, 'reboot_path')),
-                    "name": "Run reboot file"
+                    "include_tasks": os.path.abspath(inventory.get_group_metadata(group_name, 'shutdown_path')),
+                    "name": "Run shutdown file"
                 }
             )
         
@@ -226,6 +227,7 @@ class NetworkInstance():
         
         services_list = self.get_services()
 
+        builder.dnsmasq.start()
         services_state_file = self._get_bootstrap_state_file(builder, "services", services_list)
 
         if not services_state_file.is_done():     
@@ -250,9 +252,11 @@ class NetworkInstance():
                 logger.error("Services Ansible bootstrap failed!")
                 return False
 
-            # Move hosts to the network's switch
+            # Move hosts to the network's switch and restart them
             for service in services_list:
-                builder.provider.set_interface(service.vmid, 0, self.switch_id)    
+                builder.provider.set_interface(service.vmid, 0, self.switch_id)
+                builder.provider.wait_until_shutdown(service.vmid)
+                builder.provider.start_vm(service.vmid)
             
             services_state_file.mark_done() 
         else:
@@ -288,14 +292,18 @@ class NetworkInstance():
                 logger.error("Clients Ansible bootstrap failed!")
                 return False
 
-            # Move hosts to the network's switch
+            # Move hosts to the network's switch and restart them
             for client in clients_list:
-                builder.provider.set_interface(client.vmid, 0, self.switch_id)        
+                builder.provider.set_interface(client.vmid, 0, self.switch_id)     
+                builder.provider.wait_until_shutdown(service.vmid)
+                # Don't restart the clients, we will wait until DHCP service is set up
+                # This also makes sure clients don't get bootstrap DHCP
 
             clients_state_file.mark_done()
         else:
             logger.warning("Client bootstrap has already been completed for network {}".format(self.name))
-            
+        
+        builder.dnsmasq.stop()
         # Since we have access to the state files, load the vmid for our current hosts
         for hostname in self._hosts:
             if services_state_file.has_system(hostname):
@@ -355,8 +363,8 @@ class NetworkInstance():
             bootstrap_playbook.add_task(
                 group_name,
                 {
-                    "include_tasks": os.path.abspath(inventory.get_group_metadata(group_name, 'reboot_path')),
-                    "name": "Run reboot file"
+                    "include_tasks": os.path.abspath(inventory.get_group_metadata(group_name, 'shutdown_path')),
+                    "name": "Run shutdown file"
                 }
             )
         
@@ -406,8 +414,8 @@ class NetworkInstance():
                 deploy_playbook.add_task(
                     group_name,
                     {
-                        "include_tasks": os.path.abspath(router_deploy_inv.get_group_metadata(group_name, 'reboot_path')),
-                        "name": "Run reboot file"
+                        "include_tasks": os.path.abspath(router_deploy_inv.get_group_metadata(group_name, 'shutdown_path')),
+                        "name": "Run shutdown file"
                     }
                 )
 
@@ -421,7 +429,12 @@ class NetworkInstance():
                 logger.error("Ansible deploy failed!")
                 return
 
-
+            time.sleep(10)
+            logger.info("Restarting routers")
+            for i in range(len(routers_list)):
+                vmid = routers_list[i].vmid
+                builder.provider.wait_until_shutdown(vmid)
+                builder.provider.start_vm(vmid)
             
             deploy_done_file.mark_done()
         else:
@@ -464,6 +477,14 @@ class NetworkInstance():
             if result != 0:
                 logger.error("Ansible deploy failed!")
                 return False
+
+            # Immediately restart services
+            time.sleep(10)
+            for service in services_list:
+                builder.provider.wait_until_shutdown(service.vmid)
+                builder.provider.start_vm(service.vmid)
+
+            
             deploy_done_file.mark_done()
         else:
             logger.warning("Services deploy has already been completed")
@@ -484,9 +505,9 @@ class NetworkInstance():
 
             if 'snapshots' in builder.config:
                 if 'pre_deploy' in builder.config['snapshots'] and builder.config['snapshots']['pre_deploy'] == True:
-                    for service in clients_list:
-                        logger.info("Creating pre-deploy snapshot for VM {}[{}]".format(service.hostname, service.vmid))
-                        error, ok = builder.provider.snapshot_vm(service.vmid, "pre_deploy")
+                    for client in clients_list:
+                        logger.info("Creating pre-deploy snapshot for VM {}[{}]".format(client.hostname, client.vmid))
+                        error, ok = builder.provider.snapshot_vm(client.vmid, "pre_deploy")
 
                         if error is not None:
                             logger.error("Snapshot failed! - {}".format(error))
@@ -494,6 +515,11 @@ class NetworkInstance():
                 
                     logger.info("Waiting for snapshots to complete...")
                     builder.provider.wait()
+
+            # Clients were not immediately restarted when bootstrapped, do that now
+            for client in clients_list:
+                builder.provider.wait_until_shutdown(client.vmid)
+                builder.provider.start_vm(client.vmid)
 
             if self.has_dhcp:
                 logger.info("DHCP option detected, getting host mapping from DHCP server...")
@@ -595,11 +621,16 @@ class NetworkInstance():
             clients_inv = self._get_deploy_inventory(builder, clients_list)
             clients_inv.to_file(clients_inv_path)
             clients_playbook_path = clients_dir + "/base_playbook.yml"
-            clients_playbook = self._get_deploy_playbook(builder, "services", clients_inv)
+            clients_playbook = self._get_deploy_playbook(builder, "clients", clients_inv)
             clients_playbook.to_file(clients_playbook_path)
 
             logger.info("Running clients deploy Ansible")
             result = builder.run_ansible(clients_inv_path, clients_playbook_path)
+
+            time.sleep(10)
+            for client in clients_list:
+                builder.provider.wait_until_shutdown(client.vmid)
+                builder.provider.start_vm(client.vmid)
 
             if result != 0:
                 logger.error("Ansible deploy failed!")

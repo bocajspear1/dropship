@@ -1,0 +1,4 @@
+- name: Shutdown system
+  win_command: 'shutdown /s'
+  poll: 0
+  async: 1

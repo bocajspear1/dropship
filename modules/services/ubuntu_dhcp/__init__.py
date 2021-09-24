@@ -3,7 +3,7 @@ from dropship.lib.base_module import BaseModule
 class UbuntuDHCP(BaseModule):
     __NAME__ = "ubuntu_dhcp"
     __DESC__ = "Ubuntu DHCP server"
-    __IMAGE__ = "server.linux.ubuntu_1804"
+    __IMAGE__ = "server.linux.ubuntu_2004"
     __VARS__ = [""]
     __ROLE__ = "dhcp"
     __METHOD__ = "ssh"

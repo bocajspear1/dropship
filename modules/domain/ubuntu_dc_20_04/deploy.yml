@@ -44,7 +44,10 @@
 - name: Create new /etc/resolv.conf
   shell: /bin/sh -c 'echo -e "nameserver {{ network_dns_server }}\nsearch {{ domain_long|lower }}\n"  > /etc/resolv.conf'
 - name: Add DNS forwarder to Samba DNS
-  shell: echo "dns forwarder = {{ network_dns_forwarder }}" >> /etc/samba/smb.conf
+  ansible.builtin.replace:
+    path: /etc/samba/smb.conf
+    regexp: 'dns forwarder = .*$'
+    replace: 'dns forwarder = {{ network_dns_forwarder }}'
 - name: Restart Samba AD DC service
   systemd:
     state: reloaded

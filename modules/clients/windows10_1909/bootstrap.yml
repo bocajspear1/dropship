@@ -14,5 +14,10 @@
 - name: Set DNS, unless set to DHCP
   win_command: schtasks /Create /TN "Bootstrap Set DNS" /TR "C:\Windows\System32\netsh.exe interface ip set dns \"Ethernet\" static {{ network_dns_server }} " /RU SYSTEM /RL HIGHEST /SC ONSTART /z /V1
   when: "hostvars[inventory_hostname]['new_ip'] != 'dhcp'"
+- name: Force DHCP tp be reset
+  win_command: schtasks /Create /TN "Bootstrap Clear DHCP" /TR "C:\Windows\System32\cmd.exe /c ipconfig /release & ipconfig /renew" /RU SYSTEM /RL HIGHEST /SC ONSTART /z /V1
+  when: "hostvars[inventory_hostname]['new_ip'] == 'dhcp'"
 - name: Reconfigure Windows Apps
-  win_powershell: Get-AppXPackage -allusers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml"}
+  win_command: powershell.exe -exec bypass -Command 'Get-AppXPackage -allusers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml"}'
+- name: Disable auto-sleep
+  win_command: powercfg /x -standby-timeout-ac 0

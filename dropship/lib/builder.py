@@ -32,6 +32,12 @@ class DropshipBuilder():
         else:
             self.mm = ModuleManager("./out", module_path=module_path)
 
+
+    def add_vmid(self, vmid):
+        vmid_file = open("./out/vmids.list", "a+")
+        vmid_file.write(f"{vmid}\n")
+        vmid_file.close()
+
     def run_ansible(self, inventory_path, playbook_path):
         # Execute using Ansible command line
         # Ansible can be called in Python, but its broken, so we do it the old-fashioned way
@@ -70,8 +76,8 @@ class DropshipBuilder():
             logger.info("{} - Waiting for DHCP to assign addresses...".format(counter))
             time.sleep(5)
 
-        print(mac_list)
-        print(out_map)
+        # print(mac_list)
+        # print(out_map)
         return out_map
 
     def init_provider(self):
@@ -98,6 +104,18 @@ class DropshipBuilder():
         self.dnsmasq = DropshipDNSMasq(self.config['bootstrap'])
         self.external_switch = self.config['external_switch_id']
 
+        # Setup the IP for bootstrap DHCP
+        subprocess.call([
+            "/usr/bin/sudo", 
+            '/sbin/ip',
+            'addr', 
+            'add', 
+            '{}/24'.format(self.config['bootstrap']['gateway']),
+            'dev',
+            self.config['bootstrap']['interface']
+        ])
+
+        # Setup the IP for internal network access
         logger.info("Setting configuration IP on config interface")
         for instance_name in self._instances:
             instance = self._instances[instance_name]
@@ -143,11 +161,15 @@ class DropshipBuilder():
             return False
         self.provider.set_interface(self.config['commander']['vmid'], self.config['commander']['interface'], bootstrap_switch)
 
+        # Run the bootstrap for the routers
         self.dnsmasq.start()
         ok = self._bootstrap_routers()
         if not ok:
             logger.error("Failed to run bootstrap routers")
             return False
+
+        # Stop DNSMasq, each network instance will run their own
+        self.dnsmasq.stop()
 
         for instance_name in self._instances:
             instance = self._instances[instance_name]
@@ -156,7 +178,6 @@ class DropshipBuilder():
                 logger.error("Failed to run bootstrap for instance '{}'".format(instance_name))
                 return False
 
-        time.sleep(2)
         self.dnsmasq.stop()
 
         for instance_name in self._instances:
@@ -204,6 +225,7 @@ class DropshipBuilder():
                     
                     self._routers[i].vmid = vmid
                     state_file.set_vmid(router_name, vmid)
+                    self.add_vmid(vmid)
 
                 # Wait for clones
                 logger.info("Waiting for clones to complete...")
@@ -327,7 +349,7 @@ class DropshipBuilder():
             for group_name in pre_router_inv.group_list():
                 pre_playbook.add_group(
                     group_name,
-                    "Bootstrap {} routers first IP and reboot".format(group_name)
+                    "Bootstrap {} routers first IP and restart".format(group_name)
                 )
 
                 pre_playbook.add_task(
@@ -340,8 +362,8 @@ class DropshipBuilder():
                 pre_playbook.add_task(
                     group_name,
                     {
-                        "include_tasks": os.path.abspath(pre_router_inv.get_group_metadata(group_name, 'reboot_path')),
-                        "name": "Run reboot file"
+                        "include_tasks": os.path.abspath(pre_router_inv.get_group_metadata(group_name, 'shutdown_path')),
+                        "name": "Run shutdown file"
                     }
                 )
 
@@ -383,6 +405,12 @@ class DropshipBuilder():
                     instance_conn = router.interfaces[i]
                     if instance_conn.network_name == dropship.constants.ExternalConnection:
                         self.provider.set_interface(router.vmid, i, self.external_switch)
+
+            logger.info("Restarting the routers")
+            for router in self._routers:
+                self.provider.wait_until_shutdown(router.vmid)
+                self.provider.start_vm(router.vmid)
+            time.sleep(20)
 
             logger.info("Running main router Ansible")
             result = self.run_ansible(router_inventory_path, base_playbook_path)

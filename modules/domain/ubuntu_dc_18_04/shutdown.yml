@@ -1,0 +1,4 @@
+- name: Shutdown server
+  shell: 'sleep 2 && shutdown now'
+  poll: 0
+  async: 1
