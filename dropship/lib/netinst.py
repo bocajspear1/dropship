@@ -295,7 +295,7 @@ class NetworkInstance():
             # Move hosts to the network's switch and restart them
             for client in clients_list:
                 builder.provider.set_interface(client.vmid, 0, self.switch_id)     
-                builder.provider.wait_until_shutdown(service.vmid)
+                builder.provider.wait_until_shutdown(client.vmid)
                 # Don't restart the clients, we will wait until DHCP service is set up
                 # This also makes sure clients don't get bootstrap DHCP
 

@@ -15,7 +15,6 @@
 - name: Join domain
   shell: | 
     echo "{{ domain_admin_password }}" | realm join {{ domain_long|lower }}
-    pam-auth-update --enable mkhomedir
     history -c
 - name: Configure AD logon usernames
   ansible.builtin.lineinfile:
@@ -27,11 +26,6 @@
     path: /etc/sssd/sssd.conf
     regexp: '^fallback_homedir = '
     line: "fallback_homedir = /home/%u@%d"
-- name: Fix bug with AD GPO and authorization
-  ansible.builtin.lineinfile:
-    path: /etc/sssd/sssd.conf
-    create: yes
-    line: "ad_gpo_access_control = permissive"
 - name: Restart SSSD
   systemd:
     name: sssd

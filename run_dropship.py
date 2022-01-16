@@ -89,7 +89,7 @@ def main():
         config_data = json.loads(open(config_path, "r").read())
 
         module_list = mm.list_modules()
-        print(f"{'Module':40} {'Image':40}{'Image':10}{'Creds':10}")
+        print(f"{'Module':40} {'Image Name':40}{'Image':10}{'Creds':10}")
         print("-" * 110)
         for module in module_list:
             mod_obj = mm.get_module(module)
